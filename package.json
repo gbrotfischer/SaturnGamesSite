@@ -1,0 +1,30 @@
+{
+  "name": "saturn-games-site",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^3.3.4",
+    "@supabase/supabase-js": "^2.45.0",
+    "clsx": "^2.1.0",
+    "date-fns": "^3.6.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-hook-form": "^7.53.0",
+    "react-router-dom": "^6.28.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.12",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^5.4.5",
+    "vite": "^5.2.12"
+  }
+}
