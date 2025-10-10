@@ -1,0 +1,18 @@
+.notfound {
+  min-height: 60vh;
+  display: grid;
+  place-content: center;
+  gap: 1rem;
+  text-align: center;
+}
+
+.notfound h1 {
+  margin: 0;
+  font-size: clamp(4rem, 10vw, 6rem);
+  color: #4338ca;
+}
+
+.notfound a {
+  color: #4338ca;
+  font-weight: 600;
+}
