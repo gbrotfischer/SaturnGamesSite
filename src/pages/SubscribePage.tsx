@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { formatCurrency } from '../utils/formatCurrency';
 import { useAuth } from '../components/AuthContext';
 import { env } from '../lib/env';
@@ -13,13 +13,7 @@ type Plan = {
   benefits: string[];
 };
 
-type PixCharge = {
-  copyPaste: string;
-  qrCodeImageUrl?: string;
-  expiresAt?: string;
-  chargeId?: string;
-  checkoutUrl?: string;
-};
+type PaymentStatus = 'idle' | 'awaiting' | 'completed' | 'expired' | 'closed' | 'error';
 
 const plans: Plan[] = [
   {
@@ -41,57 +35,106 @@ const plans: Plan[] = [
 const SubscribePage = () => {
   const { user } = useAuth();
   const [selectedPlan, setSelectedPlan] = useState<Plan>(plans[0]);
-  const [pix, setPix] = useState<PixCharge | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [pluginReady, setPluginReady] = useState(false);
+  const [status, setStatus] = useState<PaymentStatus>('idle');
+  const [lastCorrelationId, setLastCorrelationId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const workerUrl = env.openPixWorkerUrl;
-
-  const headers = useMemo(() => {
-    const result: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (env.openPixAppId) {
-      result['x-openpix-app-id'] = env.openPixAppId;
-    }
-    return result;
-  }, []);
-
-  async function handleGeneratePix() {
-    if (!workerUrl) {
-      setError('Configure a variável VITE_OPENPIX_WORKER_URL para gerar cobranças.');
+  useEffect(() => {
+    if (typeof window === 'undefined') {
       return;
     }
 
+    const queue = (window.$openpix = window.$openpix || []);
+
+    if (env.openPixAppId) {
+      queue.push(['config', { appID: env.openPixAppId }]);
+    }
+
+    let unsubscribe: (() => void) | undefined;
+    const registerListener = () => {
+      if (window.$openpix && typeof window.$openpix.addEventListener === 'function') {
+        unsubscribe = window.$openpix.addEventListener((event) => {
+          switch (event.type) {
+            case 'CHARGE_COMPLETED':
+              setStatus('completed');
+              setError(null);
+              break;
+            case 'CHARGE_EXPIRED':
+              setStatus('expired');
+              break;
+            case 'ON_CLOSE':
+              setStatus((current) => (current === 'completed' ? current : 'closed'));
+              break;
+            case 'ON_ERROR':
+              setStatus('error');
+              setError('Ocorreu um erro ao exibir o Pix. Tente novamente.');
+              break;
+            default:
+              break;
+          }
+        });
+        setPluginReady(true);
+        return true;
+      }
+      return false;
+    };
+
+    if (!registerListener()) {
+      const timer = window.setInterval(() => {
+        if (registerListener()) {
+          window.clearInterval(timer);
+        }
+      }, 300);
+
+      return () => {
+        window.clearInterval(timer);
+        unsubscribe?.();
+      };
+    }
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [env.openPixAppId]);
+
+  function handleGeneratePix() {
     if (!user?.email) {
       setError('É necessário estar autenticado.');
       return;
     }
 
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch(`${workerUrl.replace(/\/$/, '')}/charges`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          planId: selectedPlan.id,
-          amount: selectedPlan.priceCents,
-          customerEmail: user.email
-        })
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || 'Falha ao gerar Pix');
-      }
-
-      const data = (await response.json()) as PixCharge;
-      setPix(data);
-    } catch (err: any) {
-      setError(err.message ?? 'Erro inesperado ao gerar Pix');
-    } finally {
-      setLoading(false);
+    if (!env.openPixAppId) {
+      setError('Configure a variável VITE_OPENPIX_APP_ID para gerar cobranças.');
+      return;
     }
+
+    setError(null);
+    setStatus('awaiting');
+
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const queue = (window.$openpix = window.$openpix || []);
+    const correlationId = `plan-${selectedPlan.id}-${crypto.randomUUID()}`;
+    const customerName = typeof user.user_metadata?.full_name === 'string' ? user.user_metadata.full_name : undefined;
+
+    queue.push(['config', { appID: env.openPixAppId }]);
+    queue.push([
+      'pix',
+      {
+        value: selectedPlan.priceCents,
+        correlationID: correlationId,
+        description: `Assinatura ${selectedPlan.name}`,
+        customer: {
+          email: user.email,
+          ...(customerName ? { name: customerName } : {})
+        }
+      }
+    ]);
+
+    setLastCorrelationId(correlationId);
   }
 
   return (
@@ -127,35 +170,56 @@ const SubscribePage = () => {
       </div>
 
       <section className="subscribe__cta">
-        <button onClick={handleGeneratePix} disabled={loading} className="subscribe__generate">
-          {loading ? 'Gerando cobrança…' : 'Gerar Pix agora'}
+        <button onClick={handleGeneratePix} className="subscribe__generate">
+          Abrir cobrança Pix
         </button>
         {error && <p className="subscribe__error">{error}</p>}
+        {!pluginReady && !error && (
+          <p className="subscribe__hint">Carregando plugin do OpenPix…</p>
+        )}
       </section>
 
-      {pix && (
-        <section className="subscribe__pix">
-          <h2>Pagamento gerado!</h2>
-          <p>Use o código abaixo no app do seu banco ou scaneie o QR Code.</p>
-          <textarea readOnly value={pix.copyPaste} />
-          {pix.checkoutUrl && (
-            <a href={pix.checkoutUrl} target="_blank" rel="noreferrer" className="subscribe__checkout">
-              Abrir página de pagamento
-            </a>
-          )}
-          {pix.qrCodeImageUrl && <img src={pix.qrCodeImageUrl} alt="QR Code Pix" />}
-          {pix.expiresAt && <p>Expira em: {new Date(pix.expiresAt).toLocaleString('pt-BR')}</p>}
-        </section>
-      )}
+      <section className="subscribe__status">
+        <h2>Status da cobrança</h2>
+        {status === 'idle' && <p>Nenhuma cobrança gerada ainda. Clique no botão acima para iniciar.</p>}
+        {status === 'awaiting' && (
+          <p>
+            Abrimos o modal de pagamento da OpenPix. Conclua o Pix no aplicativo do seu banco e
+            aguarde a confirmação automática.
+          </p>
+        )}
+        {status === 'completed' && (
+          <p className="subscribe__status--success">
+            Pagamento confirmado! Assim que o webhook atualizar o Supabase, sua licença ficará ativa no dashboard.
+          </p>
+        )}
+        {status === 'expired' && (
+          <p className="subscribe__status--warning">
+            A cobrança expirou. Gere uma nova cobrança Pix para tentar novamente.
+          </p>
+        )}
+        {status === 'closed' && (
+          <p>
+            Você fechou o modal antes do pagamento. Se ainda não pagou, clique novamente em “Abrir cobrança Pix”.
+          </p>
+        )}
+        {status === 'error' && (
+          <p className="subscribe__status--error">
+            Não foi possível exibir a cobrança. Verifique a configuração do plugin ou tente novamente em alguns instantes.
+          </p>
+        )}
+        {lastCorrelationId && (
+          <p className="subscribe__correlation">
+            ID de referência: <code>{lastCorrelationId}</code>
+          </p>
+        )}
+      </section>
 
       <section className="subscribe__how">
         <h2>O que acontece depois?</h2>
         <ol>
-          <li>Você paga o Pix gerado pela OpenPix.</li>
-          <li>
-            O Cloudflare Worker valida o evento usando o segredo do webhook e chama a função
-            <code>payment_add_one_month_to_license</code> no Supabase.
-          </li>
+          <li>Você paga o Pix pelo modal da OpenPix.</li>
+          <li>O Cloudflare Worker recebe o webhook e chama a função <code>payment_add_one_month_to_license</code> no Supabase.</li>
           <li>
             A tabela <code>license_changes</code> registra o histórico e o portal libera o download.
           </li>

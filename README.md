@@ -8,8 +8,7 @@ Portal web para autenticação, gestão de assinaturas e geração de pagamentos
 - Variáveis de ambiente em tempo de build/execução:
   - `VITE_SUPABASE_URL`
   - `VITE_SUPABASE_ANON_KEY`
-  - `VITE_OPENPIX_WORKER_URL` (URL pública do Worker que cria cobranças)
-  - `VITE_OPENPIX_APP_ID` (opcional, encaminhado no header `x-openpix-app-id`)
+  - `VITE_OPENPIX_APP_ID` (AppID da sua aplicação na OpenPix, usado pelo plugin do frontend)
 
 ## Desenvolvimento local
 
@@ -64,8 +63,7 @@ Adicione as variáveis em **Environment variables** → **Production** (repita p
 | --- | --- | --- |
 | `VITE_SUPABASE_URL` | URL do projeto Supabase (ex.: `https://xyzcompany.supabase.co`) | Painel Supabase |
 | `VITE_SUPABASE_ANON_KEY` | Chave `anon` | Painel Supabase |
-| `VITE_OPENPIX_WORKER_URL` | URL pública do Worker que criará cobranças (ex.: `https://api.saturngames.win/charges`) | Worker configurado abaixo |
-| `VITE_OPENPIX_APP_ID` | (Opcional) ID da aplicação cadastrado na OpenPix | Painel OpenPix |
+| `VITE_OPENPIX_APP_ID` | ID da aplicação cadastrado na OpenPix (necessário para o plugin) | Painel OpenPix |
 
 ### 4. Conectar domínio
 
@@ -86,16 +84,16 @@ Adicione as variáveis em **Environment variables** → **Production** (repita p
 4. Em **Settings → Variables**, adicione:
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_ROLE_KEY`
-   - `OPENPIX_SECRET_KEY` (token da OpenPix para gerar cobranças)
+   - `OPENPIX_SECRET_KEY` (token da OpenPix usado para validar webhooks e, opcionalmente, criar cobranças via API)
    - `OPENPIX_WEBHOOK_SECRET` (segredo usado para validar o header `x-openpix-signature`)
    - (Opcional) `OPENPIX_APP_ID` se quiser informar o App ID no header `x-openpix-app-id`
    - (Opcional) `OPENPIX_API_BASE` para apontar para sandbox da OpenPix, se aplicável
    - (Opcional) `CORS_ALLOW_ORIGIN` com o domínio do portal para restringir as origens
 5. Em **Triggers → Routes**, crie uma rota como `api.saturngames.win/*` associada ao Worker.
 6. No DNS do Cloudflare, crie um registro CNAME ou AAAA para `api.saturngames.win` apontando para o Worker (o assistente oferece a opção automaticamente).
-7. Publique o Worker e copie a URL final, por exemplo `https://api.saturngames.win/charges` (usada pelo frontend) e `https://api.saturngames.win/webhooks/openpix` (usada pelo webhook).
+7. Publique o Worker e copie a URL final. Você utilizará `https://api.saturngames.win/webhooks/openpix` no painel da OpenPix para receber confirmações de pagamento. A rota `/charges` permanece disponível apenas caso queira criar cobranças pelo backend no futuro.
 
-> Se preferir, mantenha o Worker separado: um endpoint `/charges` para o frontend criar pagamentos e outro `/webhooks/openpix` para receber confirmações.
+> Se preferir, mantenha o Worker apenas como webhook. A criação da cobrança agora é feita diretamente pelo plugin do frontend.
 
 > Referência rápida: o diretório `worker/` contém um `wrangler.toml` básico e o código pronto para colar no editor do Cloudflare ou publicar via `npx wrangler deploy`.
 
@@ -116,6 +114,14 @@ Ao abrir o Worker recém-criado, você verá abas como na captura enviada:
 
 Depois de configurar variáveis e rotas, clique em **Deploy**. Na parte superior da página o Cloudflare mostrará a URL pública (`https://<worker>.workers.dev/...`) — use-a para testar até concluir a configuração do domínio personalizado.
 
+## Passo a passo: ativar o plugin da OpenPix no frontend
+
+1. Abra `index.html` e confirme que o script do plugin está presente:<br>`<script src="https://plugin.woovi.com/v1/woovi.js" async></script>`.
+2. Garanta que a variável `VITE_OPENPIX_APP_ID` esteja definida no Cloudflare Pages e nos ambientes locais. O AppID vem do painel da OpenPix.
+3. Ao acessar `/assine`, verifique no console do navegador se aparecem os logs `[Woovi] connecting` e `[Woovi] connected`. Isso confirma que o plugin foi carregado.
+4. Clique em **Abrir cobrança Pix** para disparar `window.$openpix.push(['pix', ...])`. O modal da OpenPix deve ser exibido imediatamente com QR Code e Pix Copia e Cola.
+5. Use os eventos de status (já tratados em `SubscribePage.tsx`) para acompanhar se a cobrança foi paga, expirada ou fechada.
+
 ## Passo a passo: configurar a OpenPix
 
 1. **Criar conta** – acesse [app.openpix.com.br](https://app.openpix.com.br) e registre uma conta empresarial.
@@ -127,12 +133,15 @@ Depois de configurar variáveis e rotas, clique em **Deploy**. Na parte superior
 5. **Testar webhook** – use o botão **Enviar teste** no painel da OpenPix. Confira os logs do Worker (Cloudflare → Workers → Logs) para garantir que a requisição chega e a RPC é executada sem erros.
 6. **Habilitar modo produção** – se iniciou em modo sandbox, solicite habilitação para ambiente real quando estiver pronto.
 
-### Criar cobranças a partir do Worker
+### Criar cobranças via plugin JavaScript da OpenPix
 
-1. O frontend chama `POST https://api.saturngames.win/charges` com os dados do plano (valor, descrição, e-mail do cliente).
-2. O Worker faz `fetch` para `https://api.openpix.com.br/api/openpix/charge` com o `OPENPIX_SECRET_KEY`.
-3. A resposta contém o `brCode` e o link do Pix Copia e Cola, que o frontend mostra ao usuário.
-4. Quando o pagamento confirmar, a OpenPix chama o webhook configurado, que por sua vez atualiza a licença no Supabase.
+1. O `index.html` do projeto injeta o script oficial do plugin (`https://plugin.woovi.com/v1/woovi.js`).
+2. Ao carregar a página de assinatura, o componente `SubscribePage` envia `window.$openpix.push(['config', { appID: VITE_OPENPIX_APP_ID }])` para inicializar o plugin com o seu AppID.
+3. Quando o usuário escolhe um plano e clica em **Abrir cobrança Pix**, o frontend gera um `correlationID` único e executa `window.$openpix.push(['pix', { value, correlationID, description, customer }])`.
+4. O plugin exibe o modal oficial da OpenPix com QR Code, Pix Copia e Cola e acompanha o status em tempo real.
+5. Eventos como `CHARGE_COMPLETED` e `CHARGE_EXPIRED` são capturados para atualizar a interface e orientar o cliente.
+
+> O Worker continua necessário para processar os webhooks e liberar a licença no Supabase. A criação da cobrança, porém, ocorre totalmente no frontend via plugin.
 
 ## Checklist final antes de liberar
 
@@ -140,6 +149,7 @@ Depois de configurar variáveis e rotas, clique em **Deploy**. Na parte superior
 - [ ] Domínio `www.saturngames.win` apontando para o Pages e redirecionamento configurado para o apex.
 - [ ] Worker publicado em `api.saturngames.win` com variáveis seguras e logs funcionando.
 - [ ] Webhook da OpenPix apontando para o Worker e testado.
+- [ ] Plugin da OpenPix carregando e exibindo o modal de pagamento em `/assine`.
 - [ ] RPC `payment_add_one_month_to_license` retornando 200 durante os testes.
 - [ ] Usuário de teste conseguindo logar e visualizar o status da licença no dashboard.
 
@@ -150,12 +160,12 @@ Depois de configurar variáveis e rotas, clique em **Deploy**. Na parte superior
 - `src/pages/` – Páginas (landing, autenticação, dashboard, assinatura, FAQ).
 - `src/lib/` – Cliente Supabase e utilitários de ambiente.
 - `src/utils/` – Funções auxiliares (ex.: formatação de moeda).
-- `worker/` – Código do Cloudflare Worker que cria cobranças Pix e processa webhooks.
+- `worker/` – Código do Cloudflare Worker que processa webhooks da OpenPix (com endpoint opcional para criar cobranças via API).
 
 ## Integrações
 
 - **Supabase**: autenticação (e-mail/senha, Google) e leitura da tabela `public.licenses` protegida por RLS.
-- **OpenPix**: geração de cobranças via chamada ao Worker (endpoint `/charges`).
+- **OpenPix**: geração de cobranças direto no frontend com o plugin oficial e confirmação via webhook no Worker.
 - **Cloudflare Workers**: responsável por receber webhooks da OpenPix e chamar a RPC `payment_add_one_month_to_license` usando a `service_role`.
 
 ## Próximos passos sugeridos
