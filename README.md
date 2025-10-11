@@ -80,20 +80,18 @@ Adicione as variáveis em **Environment variables** → **Production** (repita p
 
 1. No painel Cloudflare, acesse **Workers & Pages → Overview → Create application**.
 2. Escolha **Create Worker** e dê um nome (ex.: `openpix-webhook`).
-3. Substitua o código padrão pelo conteúdo de `worker/src/index.ts` deste repositório (cole na aba de edição ou publique via `wrangler deploy worker`).
-4. Em **Settings → Variables**, adicione:
-   - `SUPABASE_URL`
-   - `SUPABASE_SERVICE_ROLE_KEY`
-   - `OPENPIX_SECRET_KEY` (token da OpenPix usado para validar webhooks e, opcionalmente, criar cobranças via API)
-   - `OPENPIX_WEBHOOK_SECRET` (segredo usado para validar o header `x-openpix-signature`)
-   - (Opcional) `OPENPIX_APP_ID` se quiser informar o App ID no header `x-openpix-app-id`
-   - (Opcional) `OPENPIX_API_BASE` para apontar para sandbox da OpenPix, se aplicável
-   - (Opcional) `CORS_ALLOW_ORIGIN` com o domínio do portal para restringir as origens
-5. Em **Triggers → Routes**, crie uma rota como `api.saturngames.win/*` associada ao Worker.
-6. No DNS do Cloudflare, crie um registro CNAME ou AAAA para `api.saturngames.win` apontando para o Worker (o assistente oferece a opção automaticamente).
-7. Publique o Worker e copie a URL final. Você utilizará `https://api.saturngames.win/webhooks/openpix` no painel da OpenPix para receber confirmações de pagamento. A rota `/charges` permanece disponível apenas caso queira criar cobranças pelo backend no futuro.
+3. Abra o editor e substitua o código padrão pelo conteúdo de `worker/src/index.ts` deste repositório. O arquivo está em JavaScript padrão (módulos) para ser colado diretamente no painel. Caso prefira CLI, use `npx wrangler deploy worker/src/index.ts`.
+4. Na barra lateral do editor, defina o modo **Modules** (ícone de engrenagem → "Worker type" → **Modules**) — esse modo é necessário para receber as variáveis de ambiente.
+5. Em **Settings → Variables**, adicione:
+   - `SUPABASE_URL` – URL do projeto Supabase.
+   - `SUPABASE_SERVICE_ROLE_KEY` – chave `service_role` (adicione como **Encrypted**).
+   - (Opcional) `OPENPIX_WEBHOOK_SECRET` – segredo exibido ao criar o webhook na OpenPix. Se ainda não possuir, deixe vazio; o Worker aceitará requisições sem validar assinatura.
+   - (Opcional) `CORS_ALLOW_ORIGIN` – domínio autorizado a fazer chamadas (`https://www.saturngames.win`).
+6. Em **Triggers → Routes**, crie uma rota como `api.saturngames.win/*` associada ao Worker.
+7. No DNS do Cloudflare, adicione o subdomínio `api.saturngames.win` apontando para o Worker (o assistente oferece criar automaticamente após salvar a rota).
+8. Publique o Worker e teste acessando `https://api.saturngames.win/` — a resposta deve ser `{ "status": "ok" }`. A URL de webhook será `https://api.saturngames.win/webhooks/openpix`.
 
-> Se preferir, mantenha o Worker apenas como webhook. A criação da cobrança agora é feita diretamente pelo plugin do frontend.
+> Este Worker trata apenas os webhooks da OpenPix e chama o Supabase. A criação da cobrança ocorre exclusivamente no frontend via plugin oficial.
 
 > Referência rápida: o diretório `worker/` contém um `wrangler.toml` básico e o código pronto para colar no editor do Cloudflare ou publicar via `npx wrangler deploy`.
 
@@ -106,9 +104,8 @@ Ao abrir o Worker recém-criado, você verá abas como na captura enviada:
 - **Variáveis e segredos** é o formulário onde você adiciona as chaves que o Worker usará. Clique em **Adicionar** e cadastre cada item:
   - `SUPABASE_URL` → URL do projeto Supabase.
   - `SUPABASE_SERVICE_ROLE_KEY` → chave `service_role` (use a opção **Valor criptografado** para segredos).
-  - `OPENPIX_SECRET_KEY` → token da OpenPix (também como segredo).
-  - `OPENPIX_WEBHOOK_SECRET` → segredo fornecido pela OpenPix para validar o header `x-openpix-signature`.
-  - (Opcional) `CORS_ALLOW_ORIGIN`, `OPENPIX_APP_ID`, `OPENPIX_API_BASE` e demais ajustes.
+  - (Opcional) `OPENPIX_WEBHOOK_SECRET` → segredo fornecido pela OpenPix para validar o header `x-openpix-signature`.
+  - (Opcional) `CORS_ALLOW_ORIGIN` → domínio autorizado a chamar o Worker.
 - **Disparar eventos** só é usado para agendar tarefas em background; você pode deixar desativado caso não precise de CRON.
 - **Logs do Workers** permite ativar a coleta de logs em tempo real. Em produção, vale habilitar para depurar webhooks.
 
@@ -125,12 +122,13 @@ Depois de configurar variáveis e rotas, clique em **Deploy**. Na parte superior
 ## Passo a passo: configurar a OpenPix
 
 1. **Criar conta** – acesse [app.openpix.com.br](https://app.openpix.com.br) e registre uma conta empresarial.
-2. **Criar uma aplicação** – no menu *Integrações → Aplicações*, clique em **Nova aplicação** e anote:
-   - `APP_ID` (usado pelo frontend via `VITE_OPENPIX_APP_ID`, opcional).
-   - `API_KEY` ou `SECRET_KEY` (usado no Worker para autenticação ao criar cobranças).
-3. **Configurar Webhook** – ainda na aplicação, informe a URL do Worker que receberá confirmações, ex.: `https://api.saturngames.win/webhooks/openpix`.
-4. **Definir eventos** – marque os eventos relevantes (por exemplo, `charge.completed`, `charge.expired`).
-5. **Testar webhook** – use o botão **Enviar teste** no painel da OpenPix. Confira os logs do Worker (Cloudflare → Workers → Logs) para garantir que a requisição chega e a RPC é executada sem erros.
+2. **Criar uma aplicação** – no menu *Integrações → Aplicações*, clique em **Nova aplicação** e anote o `APP_ID`. Esse valor alimenta `VITE_OPENPIX_APP_ID` no frontend.
+3. **Configurar Webhook** – dentro da mesma aplicação, abra a aba **Webhooks** e clique em **Adicionar webhook**.
+   - Informe a URL `https://api.saturngames.win/webhooks/openpix` (use a URL `*.workers.dev` enquanto o domínio não estiver ativo).
+   - Escolha os eventos que deseja receber (`OPENPIX:TRANSACTION_RECEIVED` já cobre confirmações de pagamento).
+   - Ao salvar, a OpenPix exibirá um campo **Secret** (ou **Token**) — copie-o e cole em `OPENPIX_WEBHOOK_SECRET` nas variáveis do Worker. Caso pule esse passo, deixe o campo vazio no Worker até conseguir o segredo.
+4. **Testar webhook** – utilize o botão **Enviar teste**. A resposta deve ser `200` com `{ "status": "processed" }` ou `{ "status": "ignored" ... }`. Se receber erro 401, verifique o segredo; se receber erro 500, consulte os logs do Worker.
+5. **Verificar no Supabase** – após um teste bem-sucedido, confirme que a RPC `payment_add_one_month_to_license` foi executada consultando `public.licenses` ou `public.license_changes`.
 6. **Habilitar modo produção** – se iniciou em modo sandbox, solicite habilitação para ambiente real quando estiver pronto.
 
 ### Criar cobranças via plugin JavaScript da OpenPix
