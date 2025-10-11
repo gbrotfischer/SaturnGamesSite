@@ -1,0 +1,24 @@
+.sg-footer {
+  margin-top: 4rem;
+  padding: 2rem 1.5rem;
+  background: #111827;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.sg-footer__inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.sg-footer__links {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.sg-footer__links a {
+  color: rgba(255, 255, 255, 0.85);
+}
