@@ -1,0 +1,15 @@
+.sg-app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.sg-main {
+  flex: 1;
+}
+
+.sg-center {
+  padding: 4rem 1.5rem;
+  text-align: center;
+  font-weight: 500;
+}
