@@ -42,7 +42,9 @@ const AuthPage = () => {
         const { error } = await supabase.auth.signUp({
           email: values.email,
           password: values.password,
-          emailRedirectTo: window.location.origin + '/dashboard'
+          options: {
+            emailRedirectTo: window.location.origin + '/dashboard'
+          }
         });
         if (error) throw error;
         setMessage('Conta criada! Verifique seu e-mail para confirmar.');
