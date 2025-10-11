@@ -164,29 +164,63 @@ const handleWebhook = async (request, env, origin) => {
   return toJsonResponse(200, { status: 'processed', email: customerEmail }, origin);
 };
 
+const handleRequest = async (request, env) => {
+  const requestOrigin = request.headers.get('origin') || undefined;
+  const allowedOrigin = env.CORS_ALLOW_ORIGIN || requestOrigin || '*';
+  const url = new URL(request.url);
+
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        ...buildCorsHeaders(allowedOrigin),
+        'Content-Length': '0',
+      },
+    });
+  }
+
+  if (url.pathname === '/webhooks/openpix') {
+    return handleWebhook(request, env, allowedOrigin);
+  }
+
+  if (request.method === 'GET' && url.pathname === '/') {
+    return toJsonResponse(
+      200,
+      {
+        status: 'ok',
+        supabaseConfigured:
+          Boolean(env.SUPABASE_URL) && Boolean(env.SUPABASE_SERVICE_ROLE_KEY),
+        secretConfigured: Boolean(env.OPENPIX_WEBHOOK_SECRET),
+        timestamp: new Date().toISOString(),
+      },
+      allowedOrigin,
+    );
+  }
+
+  if (request.method === 'GET' && url.pathname === '/healthz') {
+    return toTextResponse(200, 'ok', allowedOrigin);
+  }
+
+  return toJsonResponse(404, { error: 'Not found' }, allowedOrigin);
+};
+
 export default {
   async fetch(request, env) {
-    const origin = env.CORS_ALLOW_ORIGIN || '*';
-    const url = new URL(request.url);
+    try {
+      return await handleRequest(request, env);
+    } catch (error) {
+      console.error('Worker unhandled exception', error);
+      const allowedOrigin = env?.CORS_ALLOW_ORIGIN || '*';
 
-    if (request.method === 'OPTIONS') {
-      return new Response(null, {
-        status: 204,
-        headers: {
-          ...buildCorsHeaders(origin),
-          'Content-Length': '0',
+      return toJsonResponse(
+        500,
+        {
+          error: 'worker_failure',
+          message:
+            error instanceof Error ? error.message : typeof error === 'string' ? error : 'Unknown error',
         },
-      });
+        allowedOrigin,
+      );
     }
-
-    if (url.pathname === '/webhooks/openpix') {
-      return handleWebhook(request, env, origin);
-    }
-
-    if (request.method === 'GET' && url.pathname === '/') {
-      return toJsonResponse(200, { status: 'ok' }, origin);
-    }
-
-    return toJsonResponse(404, { error: 'Not found' }, origin);
   },
 };

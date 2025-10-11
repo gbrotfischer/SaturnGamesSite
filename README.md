@@ -89,7 +89,7 @@ Adicione as variáveis em **Environment variables** → **Production** (repita p
    - (Opcional) `CORS_ALLOW_ORIGIN` – domínio autorizado a fazer chamadas (`https://www.saturngames.win`).
 6. Em **Triggers → Routes**, crie uma rota como `api.saturngames.win/*` associada ao Worker.
 7. No DNS do Cloudflare, adicione o subdomínio `api.saturngames.win` apontando para o Worker (o assistente oferece criar automaticamente após salvar a rota).
-8. Publique o Worker e teste acessando `https://api.saturngames.win/` — a resposta deve ser `{ "status": "ok" }`. A URL de webhook será `https://api.saturngames.win/webhooks/openpix`.
+8. Publique o Worker e teste acessando `https://api.saturngames.win/` — a resposta trará `status`, `supabaseConfigured` e `secretConfigured`. A URL de webhook será `https://api.saturngames.win/webhooks/openpix` e o atalho de saúde simples `https://api.saturngames.win/healthz` devolve `ok`.
 
 > Este Worker trata apenas os webhooks da OpenPix e chama o Supabase. A criação da cobrança ocorre exclusivamente no frontend via plugin oficial.
 
