@@ -1,0 +1,12 @@
+name = "saturn-openpix"
+main = "src/index.ts"
+compatibility_date = "2024-01-29"
+
+[vars]
+# Configure via wrangler or dashboard; keys here are placeholders/documentation only.
+# SUPABASE_URL = "https://xyzcompany.supabase.co"
+# SUPABASE_SERVICE_ROLE_KEY = "service-role-key"
+# OPENPIX_SECRET_KEY = "openpix-secret"
+# OPENPIX_WEBHOOK_SECRET = "optional-hmac-secret"
+# OPENPIX_APP_ID = "optional-app-id"
+# OPENPIX_API_BASE = "https://api.openpix.com.br"

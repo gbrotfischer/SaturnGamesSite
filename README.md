@@ -82,20 +82,39 @@ Adicione as variáveis em **Environment variables** → **Production** (repita p
 
 1. No painel Cloudflare, acesse **Workers & Pages → Overview → Create application**.
 2. Escolha **Create Worker** e dê um nome (ex.: `openpix-webhook`).
-3. Substitua o código padrão por uma função que:
-   - Valide o `x-openpix-signature` (ou o mecanismo do provedor escolhido).
-   - Consulte o Supabase usando `SUPABASE_SERVICE_ROLE_KEY` e chame a RPC `payment_add_one_month_to_license`.
-   - Retorne `200` quando a cobrança for processada.
+3. Substitua o código padrão pelo conteúdo de `worker/src/index.ts` deste repositório (cole na aba de edição ou publique via `wrangler deploy worker`).
 4. Em **Settings → Variables**, adicione:
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_ROLE_KEY`
-   - `OPENPIX_SECRET_KEY` (token da OpenPix para gerar cobranças ou validar webhooks)
-   - Qualquer outra configuração (ex.: `LOG_LEVEL`).
+   - `OPENPIX_SECRET_KEY` (token da OpenPix para gerar cobranças)
+   - `OPENPIX_WEBHOOK_SECRET` (segredo usado para validar o header `x-openpix-signature`)
+   - (Opcional) `OPENPIX_APP_ID` se quiser informar o App ID no header `x-openpix-app-id`
+   - (Opcional) `OPENPIX_API_BASE` para apontar para sandbox da OpenPix, se aplicável
+   - (Opcional) `CORS_ALLOW_ORIGIN` com o domínio do portal para restringir as origens
 5. Em **Triggers → Routes**, crie uma rota como `api.saturngames.win/*` associada ao Worker.
 6. No DNS do Cloudflare, crie um registro CNAME ou AAAA para `api.saturngames.win` apontando para o Worker (o assistente oferece a opção automaticamente).
 7. Publique o Worker e copie a URL final, por exemplo `https://api.saturngames.win/charges` (usada pelo frontend) e `https://api.saturngames.win/webhooks/openpix` (usada pelo webhook).
 
 > Se preferir, mantenha o Worker separado: um endpoint `/charges` para o frontend criar pagamentos e outro `/webhooks/openpix` para receber confirmações.
+
+> Referência rápida: o diretório `worker/` contém um `wrangler.toml` básico e o código pronto para colar no editor do Cloudflare ou publicar via `npx wrangler deploy`.
+
+### Entendendo a tela de Configurações do Worker
+
+Ao abrir o Worker recém-criado, você verá abas como na captura enviada:
+
+- **Visão geral** mostra o estado do deploy mais recente.
+- **Domínios e rotas** é onde você associa o Worker a um domínio público. Clique em **Adicionar rota** e informe, por exemplo, `api.saturngames.win/*`. O Cloudflare criará automaticamente o registro DNS quando o domínio estiver na sua conta.
+- **Variáveis e segredos** é o formulário onde você adiciona as chaves que o Worker usará. Clique em **Adicionar** e cadastre cada item:
+  - `SUPABASE_URL` → URL do projeto Supabase.
+  - `SUPABASE_SERVICE_ROLE_KEY` → chave `service_role` (use a opção **Valor criptografado** para segredos).
+  - `OPENPIX_SECRET_KEY` → token da OpenPix (também como segredo).
+  - `OPENPIX_WEBHOOK_SECRET` → segredo fornecido pela OpenPix para validar o header `x-openpix-signature`.
+  - (Opcional) `CORS_ALLOW_ORIGIN`, `OPENPIX_APP_ID`, `OPENPIX_API_BASE` e demais ajustes.
+- **Disparar eventos** só é usado para agendar tarefas em background; você pode deixar desativado caso não precise de CRON.
+- **Logs do Workers** permite ativar a coleta de logs em tempo real. Em produção, vale habilitar para depurar webhooks.
+
+Depois de configurar variáveis e rotas, clique em **Deploy**. Na parte superior da página o Cloudflare mostrará a URL pública (`https://<worker>.workers.dev/...`) — use-a para testar até concluir a configuração do domínio personalizado.
 
 ## Passo a passo: configurar a OpenPix
 
@@ -131,6 +150,7 @@ Adicione as variáveis em **Environment variables** → **Production** (repita p
 - `src/pages/` – Páginas (landing, autenticação, dashboard, assinatura, FAQ).
 - `src/lib/` – Cliente Supabase e utilitários de ambiente.
 - `src/utils/` – Funções auxiliares (ex.: formatação de moeda).
+- `worker/` – Código do Cloudflare Worker que cria cobranças Pix e processa webhooks.
 
 ## Integrações
 
