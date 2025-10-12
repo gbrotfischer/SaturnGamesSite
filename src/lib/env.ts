@@ -7,17 +7,3 @@ export const env = {
   apiBaseUrl: optional(import.meta.env.VITE_API_BASE_URL as string | undefined),
   turnstileSiteKey: optional(import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined)
 };
-
-export function assertEnv() {
-  if (!env.supabaseUrl) {
-    throw new Error('VITE_SUPABASE_URL não configurada.');
-  }
-
-  if (!env.supabaseAnonKey) {
-    throw new Error('VITE_SUPABASE_ANON_KEY não configurada.');
-  }
-
-  if (!env.apiBaseUrl) {
-    throw new Error('VITE_API_BASE_URL não configurada.');
-  }
-}

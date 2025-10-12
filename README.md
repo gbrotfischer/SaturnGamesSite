@@ -3,6 +3,7 @@
 Portal gamer dark focado em aluguel individual de mods e jogos criados para lives no TikTok. O projeto entrega:
 
 - Front-end em React + Vite com rotas para Home, Catálogo, Página de Jogo, Minha Conta, SAC e Autenticação.
+- Catálogo inicial em `src/data/catalog.ts` com jogos disponíveis e "em breve" (pode editar/expandir manualmente).
 - Integração com Supabase (Auth + Database) para catálogo, aluguéis, compras vitalícias e notificações.
 - Cobranças Pix via plugin oficial da OpenPix com sessões geradas por um Worker no Cloudflare.
 - Worker que expõe endpoints REST (`/api/checkout/session`, `/api/support/ticket`, `/api/notify/upcoming`, `/api/account/preferences`) e processa webhooks de pagamento.
@@ -14,6 +15,16 @@ Portal gamer dark focado em aluguel individual de mods e jogos criados para live
 - Supabase (`@supabase/supabase-js`)
 - OpenPix plugin (`https://plugin.woovi.com/v1/woovi.js`)
 - Cloudflare Pages (front) + Cloudflare Workers (backend edge)
+
+## Catálogo base (demo)
+
+- `src/data/catalog.ts` carrega três jogos exemplo:
+  - **Bubbles TikTok** (aluguel ativo, já com preço e screenshots)
+  - **Saturn Plinko** (em breve)
+  - **Saturn Cleaner** (em breve)
+- Ao rodar sem Supabase configurado, o front-end usa automaticamente esse catálogo local.
+- Quando o Supabase estiver pronto, basta popular as tabelas `games`/`game_assets` que o site troca para os dados reais.
+- Atualize imagens editando os SVGs em `public/media/` ou apontando para URLs públicas próprias.
 
 ## Variáveis de ambiente
 
@@ -60,6 +71,7 @@ O bundle final ficará em `dist/`.
    - `games`, `game_assets`, `rentals`, `purchases`, `releases_upcoming`, `tickets_support`, `user_notifications`, `checkout_sessions`.
 3. Configure RLS conforme a sua política (ex.: permitir que usuários autenticados leiam apenas seus aluguéis). O esquema fornece `text[]` para tags/gêneros e constraints para evitar duplicidade.
 4. (Opcional) adicione triggers/jobs para marcar aluguéis expirados ou enviar notificações.
+5. Sem Supabase configurado, o portal funciona em modo demo usando o catálogo local (auth e pagamentos ficam desativados).
 
 ## Cloudflare Pages (frontend)
 
@@ -114,6 +126,7 @@ Todos respondem JSON com CORS liberado para o domínio configurado.
 ├── src
 │   ├── App.tsx
 │   ├── components/ (Header, Footer, GameCard, AuthContext)
+│   ├── data/catalog.ts (catálogo base usado como fallback)
 │   ├── hooks/useOpenPixCheckout.ts
 │   ├── lib/ (api.ts, env.ts, supabaseClient.ts)
 │   ├── pages/ (HomePage, LibraryPage, GamePage, AccountPage, SupportPage, AuthPage, NotFoundPage)

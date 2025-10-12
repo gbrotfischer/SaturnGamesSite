@@ -1,12 +1,22 @@
-import { createClient } from '@supabase/supabase-js';
-import { env, assertEnv } from './env';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { env } from './env';
 
-assertEnv();
+let cachedClient: SupabaseClient | null = null;
 
-export const supabase = createClient(env.supabaseUrl!, env.supabaseAnonKey!, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true
+export function getSupabaseClient() {
+  if (!env.supabaseUrl || !env.supabaseAnonKey) {
+    return null;
   }
-});
+
+  if (!cachedClient) {
+    cachedClient = createClient(env.supabaseUrl!, env.supabaseAnonKey!, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      }
+    });
+  }
+
+  return cachedClient;
+}

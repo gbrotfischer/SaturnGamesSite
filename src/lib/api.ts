@@ -1,4 +1,4 @@
-import { supabase } from './supabaseClient';
+import { getSupabaseClient } from './supabaseClient';
 import { env } from './env';
 import type {
   CheckoutMode,
@@ -86,6 +86,11 @@ type RawNotificationPrefs = {
   email_expiry_alerts: boolean | null;
 };
 
+async function loadLocalCatalog() {
+  const module = await import('../data/catalog');
+  return module.localCatalog;
+}
+
 function mapGame(raw: RawGame): Game {
   const assets: GameAsset[] =
     raw.game_assets?.map((asset) => ({
@@ -130,6 +135,11 @@ function mapGame(raw: RawGame): Game {
 }
 
 export async function fetchCatalog() {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return loadLocalCatalog();
+  }
+
   const { data, error } = await supabase
     .from('games')
     .select(GAME_SELECT)
@@ -137,13 +147,25 @@ export async function fetchCatalog() {
     .order('popularity_score', { ascending: false });
 
   if (error) {
-    throw new Error(`Falha ao carregar catálogo: ${error.message}`);
+    console.warn('Falha ao carregar catálogo do Supabase, usando fallback estático.', error);
+    return loadLocalCatalog();
   }
 
-  return (data ?? []).map(mapGame);
+  if (!data || data.length === 0) {
+    return loadLocalCatalog();
+  }
+
+  return data.map(mapGame);
 }
 
 export async function fetchGameBySlug(slug: string) {
+  const supabase = getSupabaseClient();
+
+  if (!supabase) {
+    const localCatalog = await loadLocalCatalog();
+    return localCatalog.find((game) => game.slug === slug) ?? null;
+  }
+
   const { data, error } = await supabase
     .from('games')
     .select(GAME_SELECT)
@@ -151,13 +173,25 @@ export async function fetchGameBySlug(slug: string) {
     .maybeSingle();
 
   if (error) {
-    throw new Error(`Falha ao carregar jogo: ${error.message}`);
+    console.warn('Falha ao carregar jogo do Supabase, usando fallback estático.', error);
+    const localCatalog = await loadLocalCatalog();
+    return localCatalog.find((game) => game.slug === slug) ?? null;
   }
 
-  return data ? mapGame(data) : null;
+  if (!data) {
+    const localCatalog = await loadLocalCatalog();
+    return localCatalog.find((game) => game.slug === slug) ?? null;
+  }
+
+  return mapGame(data);
 }
 
 export async function fetchActiveRentals(userId: string): Promise<RentalWithGame[]> {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return [];
+  }
+
   const { data, error } = await supabase
     .from('rentals')
     .select(`id, user_id, game_id, starts_at, expires_at, status, payment_ref, mode, game:games(${GAME_SELECT})`)
@@ -184,6 +218,11 @@ export async function fetchActiveRentals(userId: string): Promise<RentalWithGame
 }
 
 export async function fetchPurchases(userId: string): Promise<PurchaseWithGame[]> {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return [];
+  }
+
   const { data, error } = await supabase
     .from('purchases')
     .select(`id, user_id, game_id, purchased_at, payment_ref, game:games(${GAME_SELECT})`)
@@ -207,6 +246,14 @@ export async function fetchPurchases(userId: string): Promise<PurchaseWithGame[]
 }
 
 export async function fetchNotificationPreferences(userId: string): Promise<NotificationPreferences> {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return {
+      emailReleaseAlerts: true,
+      emailExpiryAlerts: true,
+    };
+  }
+
   const { data, error } = await supabase
     .from('user_notifications')
     .select('email_release_alerts, email_expiry_alerts')

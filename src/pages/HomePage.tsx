@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import GameCard from '../components/GameCard';
+import { useAuth } from '../components/AuthContext';
 import { fetchCatalog } from '../lib/api';
+import { formatCurrency } from '../utils/formatCurrency';
 import type { Game } from '../types';
 
 import './HomePage.css';
 
 const HomePage = () => {
+  const { user } = useAuth();
   const [games, setGames] = useState<Game[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -50,55 +53,73 @@ const HomePage = () => {
 
   return (
     <div className="home">
-      <section className="home__hero">
-        <div className="home__hero-copy">
-          <span className="home__tag">Experiência gamer premium</span>
+      <section className="home__dashboard">
+        <div className="home__panel">
+          <span className="home__badge">Portal Saturn Games</span>
           <h1>
-            Mods e jogos originais feitos para explodir sua audiência no <strong>TikTok</strong>.
+            Bem-vindo {user?.email ? <strong>{user.email}</strong> : <strong>streamer</strong>}!
           </h1>
           <p>
-            Alugue títulos individuais com acesso rápido, pagamentos Pix integrados e suporte direto da equipe
-            Saturn Games.
+            Gerencie seus aluguéis, descubra novidades e mantenha sua audiência presa na live com experiências
+            interativas pensadas para o TikTok.
           </p>
-          <div className="home__cta">
+          <div className="home__panel-actions">
             <button type="button" onClick={() => navigate('/jogos')}>
-              Explorar jogos
+              Explorar catálogo
             </button>
-            <button type="button" onClick={() => navigate('/sac')} className="outline">
-              Falar com o suporte
+            <button type="button" onClick={() => navigate('/minha-conta')} className="secondary">
+              Minha conta
             </button>
           </div>
-          <ul className="home__trust">
-            <li>Pagamento seguro via OpenPix</li>
-            <li>Autenticação Supabase</li>
-            <li>Deploy protegido no Cloudflare</li>
-          </ul>
+          <dl className="home__metrics">
+            <div>
+              <dt>Integração segura</dt>
+              <dd>OpenPix + Supabase</dd>
+            </div>
+            <div>
+              <dt>Modo TikTok</dt>
+              <dd>Compatível com lives</dd>
+            </div>
+            <div>
+              <dt>Suporte</dt>
+              <dd>Equipe Saturn Games</dd>
+            </div>
+          </dl>
         </div>
-        <div className="home__hero-card" aria-hidden>
-          <div className="home__hero-glow" />
-          <div className="home__hero-gradient" />
-          <div className="home__hero-info">
-            <p>Libere novos mods em minutos com monitoramento automático de licenças.</p>
-            <span>Disponível 24/7</span>
+        <div className="home__spotlight" aria-live="polite">
+          <header>
+            <h2>Jogos em destaque</h2>
+            <p>Escolha um título e gere a cobrança Pix em segundos.</p>
+          </header>
+          <div className="home__spotlight-grid">
+            {loading && <div className="home__loading">Carregando catálogo...</div>}
+            {error && <div className="home__error">{error}</div>}
+            {!loading && !error &&
+              featured.map((game) => (
+                <button
+                  key={game.id}
+                  type="button"
+                  className="home__tile"
+                  onClick={() => navigate(`/jogos/${game.slug}`)}
+                >
+                  <span className="home__tile-status">{game.status === 'available' ? 'Disponível' : 'Em breve'}</span>
+                  <strong>{game.title}</strong>
+                  <span>{game.shortDescription ?? 'Saiba tudo na página do jogo.'}</span>
+                  <footer>
+                    <span>
+                      {game.status === 'available'
+                        ? formatCurrency(game.priceCents / 100)
+                        : 'Aguardando lançamento'}
+                    </span>
+                    <span>{game.rentalDurationDays} dias</span>
+                  </footer>
+                </button>
+              ))}
+            {!loading && !error && featured.length === 0 && (
+              <p className="home__empty">Nenhum jogo em destaque no momento. Explore o catálogo completo.</p>
+            )}
           </div>
         </div>
-      </section>
-
-      <section className="home__featured">
-        <div className="home__section-header">
-          <h2>Destaques da semana</h2>
-          <p>Jogos que estão dominando as lives e trends no TikTok agora mesmo.</p>
-        </div>
-        {loading && <div className="home__loading">Carregando catálogo...</div>}
-        {error && <div className="home__error">{error}</div>}
-        {!loading && !error && (
-          <div className="home__grid">
-            {featured.map((game) => (
-              <GameCard key={game.id} game={game} highlight onPrimaryAction={() => navigate(`/jogos/${game.slug}`)} />
-            ))}
-            {featured.length === 0 && <p>Nenhum jogo em destaque no momento. Confira o catálogo completo.</p>}
-          </div>
-        )}
       </section>
 
       <section className="home__trending">

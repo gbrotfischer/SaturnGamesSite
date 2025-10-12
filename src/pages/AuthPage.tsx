@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { supabase } from '../lib/supabaseClient';
+import { getSupabaseClient } from '../lib/supabaseClient';
 import { useAuth } from '../components/AuthContext';
 
 import './AuthPage.css';
@@ -29,7 +29,14 @@ const AuthPage = () => {
     defaultValues: { email: '', password: '' }
   });
 
+  const supabase = getSupabaseClient();
+  const authDisabled = !supabase;
+
   async function onSubmit(values: AuthForm) {
+    if (!supabase) {
+      setMessage('Autenticação desativada neste ambiente. Configure o Supabase para habilitar o login.');
+      return;
+    }
     setLoading(true);
     setMessage(null);
 
@@ -59,6 +66,10 @@ const AuthPage = () => {
 
   async function signInWithGoogle() {
     setMessage(null);
+    if (!supabase) {
+      setMessage('Autenticação via Google indisponível sem configurar o Supabase.');
+      return;
+    }
     const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
     if (error) {
       setMessage(error.message);
@@ -68,6 +79,11 @@ const AuthPage = () => {
   return (
     <div className="auth">
       <div className="auth__card">
+        {authDisabled && (
+          <div className="auth__banner">
+            Configure as variáveis do Supabase para habilitar o login e a criação de contas.
+          </div>
+        )}
         <div className="auth__tabs">
           <button
             className={mode === 'login' ? 'active' : ''}
@@ -96,7 +112,7 @@ const AuthPage = () => {
             <input type="password" placeholder="••••••" {...register('password')} />
             {errors.password && <small>{errors.password.message}</small>}
           </label>
-          <button type="submit" disabled={loading} className="auth__submit">
+          <button type="submit" disabled={loading || authDisabled} className="auth__submit">
             {loading ? 'Processando…' : mode === 'login' ? 'Entrar' : 'Criar conta'}
           </button>
         </form>
@@ -105,7 +121,7 @@ const AuthPage = () => {
           <span>ou</span>
         </div>
 
-        <button className="auth__google" onClick={signInWithGoogle} type="button">
+        <button className="auth__google" onClick={signInWithGoogle} type="button" disabled={authDisabled}>
           Entrar com Google
         </button>
 
