@@ -1,12 +1,14 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import { AuthProvider, useAuth } from './components/AuthContext';
-import LandingPage from './pages/LandingPage';
+import HomePage from './pages/HomePage';
+import LibraryPage from './pages/LibraryPage';
+import GamePage from './pages/GamePage';
+import AccountPage from './pages/AccountPage';
+import SupportPage from './pages/SupportPage';
 import AuthPage from './pages/AuthPage';
-import DashboardPage from './pages/DashboardPage';
-import SubscribePage from './pages/SubscribePage';
-import FaqPage from './pages/FaqPage';
 import NotFoundPage from './pages/NotFoundPage';
 
 import './App.css';
@@ -29,27 +31,31 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   return children;
 };
 
+const ScrollToTop = () => {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [pathname]);
+
+  return null;
+};
+
 const AppRoutes = () => (
   <Routes>
-    <Route path="/" element={<LandingPage />} />
+    <Route path="/" element={<HomePage />} />
+    <Route path="/jogos" element={<LibraryPage />} />
+    <Route path="/jogos/:slug" element={<GamePage />} />
+    <Route
+      path="/minha-conta/*"
+      element={
+        <ProtectedRoute>
+          <AccountPage />
+        </ProtectedRoute>
+      }
+    />
+    <Route path="/sac" element={<SupportPage />} />
     <Route path="/entrar" element={<AuthPage />} />
-    <Route
-      path="/dashboard"
-      element={
-        <ProtectedRoute>
-          <DashboardPage />
-        </ProtectedRoute>
-      }
-    />
-    <Route
-      path="/assine"
-      element={
-        <ProtectedRoute>
-          <SubscribePage />
-        </ProtectedRoute>
-      }
-    />
-    <Route path="/faq" element={<FaqPage />} />
     <Route path="*" element={<NotFoundPage />} />
   </Routes>
 );
@@ -60,6 +66,7 @@ const App = () => {
       <div className="sg-app">
         <Header />
         <main className="sg-main">
+          <ScrollToTop />
           <AppRoutes />
         </main>
         <Footer />

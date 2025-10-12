@@ -43,7 +43,7 @@ const AuthPage = () => {
           email: values.email,
           password: values.password,
           options: {
-            emailRedirectTo: window.location.origin + '/dashboard'
+            emailRedirectTo: `${window.location.origin}/minha-conta`
           }
         });
         if (error) throw error;

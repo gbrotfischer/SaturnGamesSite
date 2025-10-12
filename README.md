@@ -1,173 +1,148 @@
 # Saturn Games Portal
 
-Portal web para autenticação, gestão de assinaturas e geração de pagamentos Pix para o ecossistema Saturn Games. Desenvolvido com React + Vite e integrado ao Supabase e OpenPix, pensado para ser publicado em Cloudflare Pages com suporte a um Worker para webhooks.
+Portal gamer dark focado em aluguel individual de mods e jogos criados para lives no TikTok. O projeto entrega:
 
-## Requisitos
+- Front-end em React + Vite com rotas para Home, Catálogo, Página de Jogo, Minha Conta, SAC e Autenticação.
+- Integração com Supabase (Auth + Database) para catálogo, aluguéis, compras vitalícias e notificações.
+- Cobranças Pix via plugin oficial da OpenPix com sessões geradas por um Worker no Cloudflare.
+- Worker que expõe endpoints REST (`/api/checkout/session`, `/api/support/ticket`, `/api/notify/upcoming`, `/api/account/preferences`) e processa webhooks de pagamento.
 
-- Node.js 18+
-- Variáveis de ambiente em tempo de build/execução:
-  - `VITE_SUPABASE_URL`
-  - `VITE_SUPABASE_ANON_KEY`
-  - `VITE_OPENPIX_APP_ID` (AppID da sua aplicação na OpenPix, usado pelo plugin do frontend)
+## Stack principal
 
-## Desenvolvimento local
+- React 18 + React Router
+- TypeScript, CSS moderno (tema dark gamer)
+- Supabase (`@supabase/supabase-js`)
+- OpenPix plugin (`https://plugin.woovi.com/v1/woovi.js`)
+- Cloudflare Pages (front) + Cloudflare Workers (backend edge)
 
-Instale as dependências e execute o servidor dev:
+## Variáveis de ambiente
+
+### Front-end (`.env` ou variáveis do Pages)
+
+| Nome | Descrição |
+| --- | --- |
+| `VITE_SUPABASE_URL` | URL do projeto Supabase |
+| `VITE_SUPABASE_ANON_KEY` | Chave `anon` do Supabase |
+| `VITE_OPENPIX_APP_ID` | AppID da sua aplicação na OpenPix (para o plugin) |
+| `VITE_API_BASE_URL` | URL pública do Worker (ex.: `https://api.saturngames.win`) |
+| `VITE_TURNSTILE_SITE_KEY` | (Opcional) site key do Cloudflare Turnstile para o formulário do SAC |
+
+### Worker (`wrangler secrets put` ou painel do Cloudflare)
+
+| Nome | Descrição |
+| --- | --- |
+| `SUPABASE_URL` | Mesmo `Project URL` usado no frontend |
+| `SUPABASE_SERVICE_ROLE_KEY` | Chave `service_role` (nunca expor no frontend) |
+| `SUPABASE_ANON_KEY` | Chave `anon` (necessária para validar o token do usuário) |
+| `OPENPIX_WEBHOOK_SECRET` | (Opcional) segredo exibido ao criar o webhook na OpenPix |
+| `OPENPIX_APP_ID` | (Opcional) AppID, útil para logs no Worker |
+| `CORS_ALLOW_ORIGIN` | Domínio autorizado (ex.: `https://www.saturngames.win`) |
+
+## Rodando localmente
 
 ```bash
 npm install
 npm run dev
 ```
 
-> Observação: alguns ambientes restritos podem bloquear o download de dependências do npm. Caso isso ocorra, execute os comandos em uma máquina com acesso liberado e suba o build para o repositório.
-
-## Build
+Build de produção:
 
 ```bash
 npm run build
 ```
 
-Os arquivos de produção serão gerados em `dist/`.
+O bundle final ficará em `dist/`.
 
-## Passo a passo: preparar o Supabase
+## Supabase
 
-1. **Criar o projeto** – acesse [app.supabase.com](https://app.supabase.com), crie um novo projeto e anote o `Project URL` e a chave `anon`.
-2. **Recuperar a chave `service_role`** – em *Project Settings → API* copie a `service_role` (use apenas no backend/Worker).
-3. **Importar as tabelas e a RPC** – a documentação técnica compartilhada inclui o SQL do esquema (`public.licenses`, `public.license_changes` e `payment_add_one_month_to_license`). Execute o script no SQL Editor.
-4. **Configurar políticas RLS** – confirme que a policy `licenses_select_own_active_by_jwt_email` está ativa para a tabela `public.licenses`.
-5. **Criar um usuário de teste** – registre manualmente um usuário pelo Supabase Auth ou via portal para validar o fluxo mais adiante.
+1. Crie um projeto em [app.supabase.com](https://app.supabase.com) e anote `Project URL`, `anon key` e `service_role`.
+2. No SQL Editor, execute `db/schema.sql` para criar as tabelas:
+   - `games`, `game_assets`, `rentals`, `purchases`, `releases_upcoming`, `tickets_support`, `user_notifications`, `checkout_sessions`.
+3. Configure RLS conforme a sua política (ex.: permitir que usuários autenticados leiam apenas seus aluguéis). O esquema fornece `text[]` para tags/gêneros e constraints para evitar duplicidade.
+4. (Opcional) adicione triggers/jobs para marcar aluguéis expirados ou enviar notificações.
 
-> Esses dados alimentam as variáveis `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` e, no Worker, `SUPABASE_SERVICE_ROLE_KEY`.
+## Cloudflare Pages (frontend)
 
-## Passo a passo: Deploy no Cloudflare Pages
+1. **Create project** → conecte o repositório.
+2. Build command `npm run build`, output `dist`, Node 18.
+3. Cadastre as variáveis listadas em [Variáveis de ambiente](#variáveis-de-ambiente).
+4. Após o primeiro deploy, associe `www.saturngames.win` em **Custom domains** e configure redirecionamento do domínio raiz.
 
-### 1. Conectar o repositório
+## Cloudflare Worker (backend)
 
-1. Entre no painel do [Cloudflare Pages](https://dash.cloudflare.com/) e clique em **Create project**.
-2. Escolha **Connect to Git** e autorize o acesso ao repositório que contém este código.
-3. Selecione a branch principal (por exemplo, `main`) e avance.
+1. Crie um Worker (modo **Modules**) e copie `worker/src/index.ts` para o editor (ou use `npx wrangler deploy`).
+2. Defina as variáveis (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`, etc.).
+3. Configure a rota `api.saturngames.win/*` em **Triggers → Routes** e deixe apenas um registro DNS CNAME apontando para `<worker>.workers.dev` (proxy laranja ativo). Isso evita o erro **1016**.
+4. Teste:
+   - `GET https://api.saturngames.win/` → status geral do Worker.
+   - `GET https://api.saturngames.win/healthz` → responde `ok`.
+   - `POST https://api.saturngames.win/api/checkout/session` com token Supabase válido → cria uma sessão.
+   - `POST https://api.saturngames.win/webhooks/openpix` (via evento de teste da OpenPix) → atualiza aluguéis/compras.
 
-### 2. Definir comandos de build
+### Endpoints do Worker
 
-1. Em **Build settings**, mantenha:
-   - Build command: `npm run build`
-   - Build output directory: `dist`
-   - Node version: `18`
-2. Confirme que o Pages executará automaticamente `npm install` antes do build.
-
-### 3. Variáveis de ambiente
-
-Adicione as variáveis em **Environment variables** → **Production** (repita para Preview se quiser builds de teste):
-
-| Nome | Valor | Origem |
+| Método | Caminho | Descrição |
 | --- | --- | --- |
-| `VITE_SUPABASE_URL` | URL do projeto Supabase (ex.: `https://xyzcompany.supabase.co`) | Painel Supabase |
-| `VITE_SUPABASE_ANON_KEY` | Chave `anon` | Painel Supabase |
-| `VITE_OPENPIX_APP_ID` | ID da aplicação cadastrado na OpenPix (necessário para o plugin) | Painel OpenPix |
+| `POST` | `/api/checkout/session` | Gera `correlationId` e registra sessão antes de abrir o modal OpenPix |
+| `POST` | `/api/support/ticket` | Cria ticket de SAC (autenticado opcional) |
+| `POST` | `/api/notify/upcoming` | Inscreve usuário/e-mail na lista “em breve” |
+| `POST` | `/api/account/preferences` | Salva preferências de notificação do usuário |
+| `POST` | `/webhooks/openpix` | Processa confirmações de pagamento e atualiza Supabase |
 
-### 4. Conectar domínio
+Todos respondem JSON com CORS liberado para o domínio configurado.
 
-1. Depois do primeiro deploy, vá em **Pages → Custom domains** e aponte `www.saturngames.win` para o projeto.
-2. Siga o assistente de DNS: a Cloudflare criará os registros necessários automaticamente quando o domínio estiver delegado para ela.
-3. Configure um redirecionamento (Page Rule) de `saturngames.win` → `https://www.saturngames.win` para evitar conteúdo duplicado.
+## Fluxo de pagamentos
 
-### 5. Publicar
+1. Front-end chama `POST /api/checkout/session` informando `gameId` e `mode` (`rental` ou `lifetime`). O Worker valida o token Supabase, consulta o jogo e retorna `correlationId`, valor e duração.
+2. O React dispara `window.$openpix.push(['pix', ...])` usando o `correlationId`. O modal oficial mostra QR Code / Pix Copia e Cola.
+3. Quando a OpenPix envia `OPENPIX:TRANSACTION_RECEIVED`/`CHARGE_COMPLETED`, o Worker valida a assinatura (se houver `OPENPIX_WEBHOOK_SECRET`), encontra a sessão e:
+   - Atualiza `checkout_sessions.status` para `paid`.
+   - Cria/estende `rentals` somando `rental_duration_days` ao vencimento atual.
+   - Ou registra `purchases` em caso de compra vitalícia.
+4. O front-end escuta eventos do plugin para informar “Pagamento confirmado” enquanto aguarda a atualização do Supabase.
 
-1. Clique em **Save and deploy**. O Cloudflare Pages executará o build e publicará o site.
-2. Aguarde a propagação de DNS (geralmente minutos). Você já pode acessar `https://www.saturngames.win`.
+## OpenPix (plugin)
 
-## Passo a passo: criar o Worker para OpenPix
+- `index.html` já injeta `<script src="https://plugin.woovi.com/v1/woovi.js" async></script>`.
+- `useOpenPixCheckout` centraliza a comunicação com o plugin (status `awaiting`, `completed`, etc.).
+- `VITE_OPENPIX_APP_ID` deve ser o AppID da aplicação criada em [app.openpix.com.br](https://app.openpix.com.br).
+- Para criar o webhook: vá em **Integrações → Aplicações → Webhooks**, informe `https://api.saturngames.win/webhooks/openpix`, copie o segredo e salve como `OPENPIX_WEBHOOK_SECRET` no Worker.
 
-1. No painel Cloudflare, acesse **Workers & Pages → Overview → Create application**.
-2. Escolha **Create Worker** e dê um nome (ex.: `openpix-webhook`).
-3. Abra o editor e substitua o código padrão pelo conteúdo de `worker/src/index.ts` deste repositório. O arquivo está em JavaScript padrão (módulos) para ser colado diretamente no painel. Caso prefira CLI, use `npx wrangler deploy worker/src/index.ts`.
-4. Na barra lateral do editor, defina o modo **Modules** (ícone de engrenagem → "Worker type" → **Modules**) — esse modo é necessário para receber as variáveis de ambiente.
-5. Em **Settings → Variables**, adicione:
-   - `SUPABASE_URL` – URL do projeto Supabase.
-   - `SUPABASE_SERVICE_ROLE_KEY` – chave `service_role` (adicione como **Encrypted**).
-   - (Opcional) `OPENPIX_WEBHOOK_SECRET` – segredo exibido ao criar o webhook na OpenPix. Se ainda não possuir, deixe vazio; o Worker aceitará requisições sem validar assinatura.
-   - (Opcional) `CORS_ALLOW_ORIGIN` – domínio autorizado a fazer chamadas (`https://www.saturngames.win`).
-6. Em **Triggers → Routes**, crie uma rota como `api.saturngames.win/*` associada ao Worker.
-7. No DNS do Cloudflare, mantenha **somente** um registro para `api.saturngames.win` do tipo **CNAME** apontando para `<nome-do-worker>.workers.dev` com o proxy laranja ativado. Remova entradas `A` de teste (como `192.0.2.1`) ou outros CNAMEs conflitantes; combinações duplicadas costumam gerar o erro **1016 – Origin DNS error** ao visitar `https://api.saturngames.win/webhooks/openpix`.
-8. Publique o Worker e teste acessando `https://api.saturngames.win/` — a resposta trará `status`, `supabaseConfigured` e `secretConfigured`. A URL de webhook será `https://api.saturngames.win/webhooks/openpix` (um GET exibirá a mensagem “Send a POST request…” confirmando que a rota está ativa) e o atalho de saúde simples `https://api.saturngames.win/healthz` devolve `ok`.
+## Estrutura de diretórios
 
-> Este Worker trata apenas os webhooks da OpenPix e chama o Supabase. A criação da cobrança ocorre exclusivamente no frontend via plugin oficial.
+```
+├── src
+│   ├── App.tsx
+│   ├── components/ (Header, Footer, GameCard, AuthContext)
+│   ├── hooks/useOpenPixCheckout.ts
+│   ├── lib/ (api.ts, env.ts, supabaseClient.ts)
+│   ├── pages/ (HomePage, LibraryPage, GamePage, AccountPage, SupportPage, AuthPage, NotFoundPage)
+│   ├── styles/global.css
+│   ├── types/ (tipos de domínio)
+│   └── utils/ (formatCurrency, helpers de data)
+├── worker/
+│   ├── src/index.ts (Worker de APIs + webhook)
+│   └── wrangler.toml
+├── db/schema.sql (DDL das tabelas)
+├── public/ (assets estáticos)
+└── README.md
+```
 
-> Referência rápida: o diretório `worker/` contém um `wrangler.toml` básico e o código pronto para colar no editor do Cloudflare ou publicar via `npx wrangler deploy`.
+## Checklist antes do go-live
 
-### Entendendo a tela de Configurações do Worker
+- [ ] Variáveis de ambiente configuradas em Pages e Worker.
+- [ ] Tabelas do Supabase criadas via `db/schema.sql` e policies ajustadas.
+- [ ] Webhook da OpenPix apontando para o Worker e testado com evento de teste.
+- [ ] Fluxo completo validado: login → selecionar jogo → gerar cobrança → confirmar pagamento → Supabase atualiza aluguel.
+- [ ] SAC enviando ticket e recebendo resposta `ticketId`.
+- [ ] Biblioteca/Minha Conta refletindo aluguéis ativos e preferências.
+- [ ] Links de políticas e seção de segurança no rodapé revisados.
 
-Ao abrir o Worker recém-criado, você verá abas como na captura enviada:
+## Scripts úteis
 
-- **Visão geral** mostra o estado do deploy mais recente.
-- **Domínios e rotas** é onde você associa o Worker a um domínio público. Clique em **Adicionar rota** e informe, por exemplo, `api.saturngames.win/*`. O Cloudflare criará automaticamente o registro DNS quando o domínio estiver na sua conta.
-- **Variáveis e segredos** é o formulário onde você adiciona as chaves que o Worker usará. Clique em **Adicionar** e cadastre cada item:
-  - `SUPABASE_URL` → URL do projeto Supabase.
-  - `SUPABASE_SERVICE_ROLE_KEY` → chave `service_role` (use a opção **Valor criptografado** para segredos).
-  - (Opcional) `OPENPIX_WEBHOOK_SECRET` → segredo fornecido pela OpenPix para validar o header `x-openpix-signature`.
-  - (Opcional) `CORS_ALLOW_ORIGIN` → domínio autorizado a chamar o Worker.
-- **Disparar eventos** só é usado para agendar tarefas em background; você pode deixar desativado caso não precise de CRON.
-- **Logs do Workers** permite ativar a coleta de logs em tempo real. Em produção, vale habilitar para depurar webhooks.
+```bash
+npm run dev      # desenvolvimento
+npm run build    # build de produção
+```
 
-Depois de configurar variáveis e rotas, clique em **Deploy**. Na parte superior da página o Cloudflare mostrará a URL pública (`https://<worker>.workers.dev/...`) — use-a para testar até concluir a configuração do domínio personalizado.
-
-## Passo a passo: ativar o plugin da OpenPix no frontend
-
-1. Abra `index.html` e confirme que o script do plugin está presente:<br>`<script src="https://plugin.woovi.com/v1/woovi.js" async></script>`.
-2. Garanta que a variável `VITE_OPENPIX_APP_ID` esteja definida no Cloudflare Pages e nos ambientes locais. O AppID vem do painel da OpenPix.
-3. Ao acessar `/assine`, verifique no console do navegador se aparecem os logs `[Woovi] connecting` e `[Woovi] connected`. Isso confirma que o plugin foi carregado.
-4. Clique em **Abrir cobrança Pix** para disparar `window.$openpix.push(['pix', ...])`. O modal da OpenPix deve ser exibido imediatamente com QR Code e Pix Copia e Cola.
-5. Use os eventos de status (já tratados em `SubscribePage.tsx`) para acompanhar se a cobrança foi paga, expirada ou fechada.
-
-## Passo a passo: configurar a OpenPix
-
-1. **Criar conta** – acesse [app.openpix.com.br](https://app.openpix.com.br) e registre uma conta empresarial.
-2. **Criar uma aplicação** – no menu *Integrações → Aplicações*, clique em **Nova aplicação** e anote o `APP_ID`. Esse valor alimenta `VITE_OPENPIX_APP_ID` no frontend.
-3. **Configurar Webhook** – dentro da mesma aplicação, abra a aba **Webhooks** e clique em **Adicionar webhook**.
-   - Informe a URL `https://api.saturngames.win/webhooks/openpix` (use a URL `*.workers.dev` enquanto o domínio não estiver ativo).
-   - Escolha os eventos que deseja receber (`OPENPIX:TRANSACTION_RECEIVED` já cobre confirmações de pagamento).
-   - Ao salvar, a OpenPix exibirá um campo **Secret** (ou **Token**) — copie-o e cole em `OPENPIX_WEBHOOK_SECRET` nas variáveis do Worker. Caso pule esse passo, deixe o campo vazio no Worker até conseguir o segredo.
-4. **Testar webhook** – utilize o botão **Enviar teste**. A resposta deve ser `200` com `{ "status": "processed" }` ou `{ "status": "ignored" ... }`. Se receber erro 401, verifique o segredo; se receber erro 500, consulte os logs do Worker.
-5. **Verificar no Supabase** – após um teste bem-sucedido, confirme que a RPC `payment_add_one_month_to_license` foi executada consultando `public.licenses` ou `public.license_changes`.
-6. **Habilitar modo produção** – se iniciou em modo sandbox, solicite habilitação para ambiente real quando estiver pronto.
-
-### Criar cobranças via plugin JavaScript da OpenPix
-
-1. O `index.html` do projeto injeta o script oficial do plugin (`https://plugin.woovi.com/v1/woovi.js`).
-2. Ao carregar a página de assinatura, o componente `SubscribePage` envia `window.$openpix.push(['config', { appID: VITE_OPENPIX_APP_ID }])` para inicializar o plugin com o seu AppID.
-3. Quando o usuário escolhe um plano e clica em **Abrir cobrança Pix**, o frontend gera um `correlationID` único e executa `window.$openpix.push(['pix', { value, correlationID, description, customer }])`.
-4. O plugin exibe o modal oficial da OpenPix com QR Code, Pix Copia e Cola e acompanha o status em tempo real.
-5. Eventos como `CHARGE_COMPLETED` e `CHARGE_EXPIRED` são capturados para atualizar a interface e orientar o cliente.
-
-> O Worker continua necessário para processar os webhooks e liberar a licença no Supabase. A criação da cobrança, porém, ocorre totalmente no frontend via plugin.
-
-## Checklist final antes de liberar
-
-- [ ] Cloudflare Pages conectado ao repositório e com variáveis de ambiente definidas.
-- [ ] Domínio `www.saturngames.win` apontando para o Pages e redirecionamento configurado para o apex.
-- [ ] Worker publicado em `api.saturngames.win` com variáveis seguras e logs funcionando.
-- [ ] Webhook da OpenPix apontando para o Worker e testado.
-- [ ] Plugin da OpenPix carregando e exibindo o modal de pagamento em `/assine`.
-- [ ] RPC `payment_add_one_month_to_license` retornando 200 durante os testes.
-- [ ] Usuário de teste conseguindo logar e visualizar o status da licença no dashboard.
-
-## Estrutura principal
-
-- `src/App.tsx` – Configuração das rotas e layout geral.
-- `src/components/AuthContext.tsx` – Provider que sincroniza a sessão Supabase no frontend.
-- `src/pages/` – Páginas (landing, autenticação, dashboard, assinatura, FAQ).
-- `src/lib/` – Cliente Supabase e utilitários de ambiente.
-- `src/utils/` – Funções auxiliares (ex.: formatação de moeda).
-- `worker/` – Código do Cloudflare Worker que processa webhooks da OpenPix (com endpoint opcional para criar cobranças via API).
-
-## Integrações
-
-- **Supabase**: autenticação (e-mail/senha, Google) e leitura da tabela `public.licenses` protegida por RLS.
-- **OpenPix**: geração de cobranças direto no frontend com o plugin oficial e confirmação via webhook no Worker.
-- **Cloudflare Workers**: responsável por receber webhooks da OpenPix e chamar a RPC `payment_add_one_month_to_license` usando a `service_role`.
-
-## Próximos passos sugeridos
-
-- Implementar o Worker/Backend descrito na documentação técnica para processar webhooks.
-- Conectar o launcher para abrir `https://saturngames.win/assine` quando a licença estiver inativa.
-- Configurar DNS no Cloudflare para `www.saturngames.win` (site) e `api.saturngames.win` (webhook/REST).
+Em ambientes sem acesso ao registry npm, faça o build localmente e publique os arquivos gerados.

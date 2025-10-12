@@ -6,9 +6,10 @@
 
 .auth__card {
   width: min(420px, 100%);
-  background: #fff;
-  border-radius: 18px;
-  box-shadow: 0 35px 65px -45px rgba(67, 56, 202, 0.45);
+  background: rgba(21, 28, 51, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--sg-radius-lg);
+  box-shadow: var(--sg-shadow-soft);
   padding: 2.5rem 2rem;
   display: flex;
   flex-direction: column;
@@ -18,29 +19,28 @@
 .auth__tabs {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  background: rgba(99, 102, 241, 0.08);
+  background: rgba(79, 70, 229, 0.2);
   padding: 0.25rem;
-  border-radius: 12px;
+  border-radius: var(--sg-radius-sm);
 }
 
 .auth__tabs button {
   border: none;
   background: transparent;
   padding: 0.75rem;
-  border-radius: 10px;
+  border-radius: var(--sg-radius-sm);
   cursor: pointer;
   font-weight: 600;
-  color: #4338ca;
+  color: var(--sg-text-muted);
 }
 
 .auth__tabs button.active {
-  background: #fff;
-  box-shadow: 0 8px 16px -12px rgba(67, 56, 202, 0.6);
+  background: rgba(79, 70, 229, 0.45);
+  color: var(--sg-text-strong);
 }
 
 .auth__form {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 1rem;
 }
 
@@ -49,24 +49,26 @@
   flex-direction: column;
   gap: 0.45rem;
   font-size: 0.9rem;
-  color: #1f2937;
+  color: var(--sg-text-muted);
 }
 
 .auth__form input {
-  border-radius: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.6);
+  border-radius: var(--sg-radius-sm);
+  border: 1px solid rgba(148, 163, 255, 0.35);
   padding: 0.8rem 1rem;
   font-size: 1rem;
+  background: rgba(15, 20, 36, 0.85);
+  color: var(--sg-text-strong);
 }
 
 .auth__form small {
-  color: #ef4444;
+  color: #fca5a5;
 }
 
 .auth__submit {
   margin-top: 0.5rem;
   padding: 0.85rem;
-  border-radius: 12px;
+  border-radius: var(--sg-radius-sm);
   border: none;
   background: linear-gradient(135deg, #4338ca, #6366f1);
   color: #fff;
@@ -83,7 +85,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  color: #94a3b8;
+  color: var(--sg-text-muted);
 }
 
 .auth__divider::before,
@@ -91,20 +93,21 @@
   content: '';
   flex: 1;
   height: 1px;
-  background: rgba(148, 163, 184, 0.5);
+  background: rgba(148, 163, 255, 0.25);
 }
 
 .auth__google {
   padding: 0.85rem;
-  border-radius: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.6);
-  background: #fff;
+  border-radius: var(--sg-radius-sm);
+  border: 1px solid rgba(148, 163, 255, 0.35);
+  background: transparent;
+  color: var(--sg-text-strong);
   cursor: pointer;
   font-weight: 600;
 }
 
 .auth__message {
   text-align: center;
-  color: #4c1d95;
+  color: var(--sg-text-muted);
   font-weight: 500;
 }
