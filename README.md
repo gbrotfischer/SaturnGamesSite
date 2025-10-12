@@ -88,8 +88,8 @@ Adicione as variáveis em **Environment variables** → **Production** (repita p
    - (Opcional) `OPENPIX_WEBHOOK_SECRET` – segredo exibido ao criar o webhook na OpenPix. Se ainda não possuir, deixe vazio; o Worker aceitará requisições sem validar assinatura.
    - (Opcional) `CORS_ALLOW_ORIGIN` – domínio autorizado a fazer chamadas (`https://www.saturngames.win`).
 6. Em **Triggers → Routes**, crie uma rota como `api.saturngames.win/*` associada ao Worker.
-7. No DNS do Cloudflare, adicione o subdomínio `api.saturngames.win` apontando para o Worker (o assistente oferece criar automaticamente após salvar a rota).
-8. Publique o Worker e teste acessando `https://api.saturngames.win/` — a resposta trará `status`, `supabaseConfigured` e `secretConfigured`. A URL de webhook será `https://api.saturngames.win/webhooks/openpix` e o atalho de saúde simples `https://api.saturngames.win/healthz` devolve `ok`.
+7. No DNS do Cloudflare, mantenha **somente** um registro para `api.saturngames.win` do tipo **CNAME** apontando para `<nome-do-worker>.workers.dev` com o proxy laranja ativado. Remova entradas `A` de teste (como `192.0.2.1`) ou outros CNAMEs conflitantes; combinações duplicadas costumam gerar o erro **1016 – Origin DNS error** ao visitar `https://api.saturngames.win/webhooks/openpix`.
+8. Publique o Worker e teste acessando `https://api.saturngames.win/` — a resposta trará `status`, `supabaseConfigured` e `secretConfigured`. A URL de webhook será `https://api.saturngames.win/webhooks/openpix` (um GET exibirá a mensagem “Send a POST request…” confirmando que a rota está ativa) e o atalho de saúde simples `https://api.saturngames.win/healthz` devolve `ok`.
 
 > Este Worker trata apenas os webhooks da OpenPix e chama o Supabase. A criação da cobrança ocorre exclusivamente no frontend via plugin oficial.
 

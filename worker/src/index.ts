@@ -8,12 +8,13 @@ const toJsonResponse = (status, data, origin, extraHeaders) =>
     },
   });
 
-const toTextResponse = (status, text, origin) =>
+const toTextResponse = (status, text, origin, extraHeaders) =>
   new Response(text, {
     status,
     headers: {
       'Content-Type': 'text/plain; charset=utf-8',
       ...buildCorsHeaders(origin),
+      ...(extraHeaders || {}),
     },
   });
 
@@ -108,10 +109,6 @@ const extractCustomerEmail = (body) => {
 };
 
 const handleWebhook = async (request, env, origin) => {
-  if (request.method !== 'POST') {
-    return toTextResponse(405, 'Method not allowed', origin);
-  }
-
   const rawBody = await request.arrayBuffer();
   const signature = request.headers.get('x-openpix-signature');
   const secret = (env.OPENPIX_WEBHOOK_SECRET || '').trim();
@@ -175,12 +172,31 @@ const handleRequest = async (request, env) => {
       headers: {
         ...buildCorsHeaders(allowedOrigin),
         'Content-Length': '0',
+        Allow: 'POST, OPTIONS',
       },
     });
   }
 
   if (url.pathname === '/webhooks/openpix') {
-    return handleWebhook(request, env, allowedOrigin);
+    if (request.method === 'POST') {
+      return handleWebhook(request, env, allowedOrigin);
+    }
+
+    if (request.method === 'GET') {
+      return toJsonResponse(
+        200,
+        {
+          status: 'listening',
+          message: 'Send a POST request with the OpenPix webhook payload to process it.',
+        },
+        allowedOrigin,
+        { Allow: 'POST, OPTIONS' },
+      );
+    }
+
+    return toTextResponse(405, 'Method not allowed', allowedOrigin, {
+      Allow: 'POST, OPTIONS',
+    });
   }
 
   if (request.method === 'GET' && url.pathname === '/') {
