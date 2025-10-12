@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title">
+  <title>Saturn Games</title>
+  <circle cx="64" cy="64" r="36" fill="#6c5ce7" />
+  <ellipse cx="64" cy="70" rx="58" ry="18" fill="none" stroke="#fdcb6e" stroke-width="10" />
+</svg>
