@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -19,6 +20,17 @@ const AuthPage = () => {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const { refreshSession } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const nextPath = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    const next = params.get('next');
+    if (next && next.startsWith('/')) {
+      return next;
+    }
+    return '/minha-conta';
+  }, [location.search]);
 
   const {
     register,
@@ -57,6 +69,7 @@ const AuthPage = () => {
         setMessage('Conta criada! Verifique seu e-mail para confirmar.');
       }
       await refreshSession();
+      navigate(nextPath, { replace: true });
     } catch (err: any) {
       setMessage(err.message ?? 'Erro inesperado.');
     } finally {
@@ -70,7 +83,10 @@ const AuthPage = () => {
       setMessage('Autenticação via Google indisponível sem configurar o Supabase.');
       return;
     }
-    const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}${nextPath}` },
+    });
     if (error) {
       setMessage(error.message);
     }

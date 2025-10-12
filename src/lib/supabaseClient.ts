@@ -3,8 +3,10 @@ import { env } from './env';
 
 let cachedClient: SupabaseClient | null = null;
 
+export const hasSupabaseCredentials = Boolean(env.supabaseUrl && env.supabaseAnonKey);
+
 export function getSupabaseClient() {
-  if (!env.supabaseUrl || !env.supabaseAnonKey) {
+  if (!hasSupabaseCredentials) {
     return null;
   }
 

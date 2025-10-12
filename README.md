@@ -2,8 +2,8 @@
 
 Portal gamer dark focado em aluguel individual de mods e jogos criados para lives no TikTok. O projeto entrega:
 
-- Front-end em React + Vite com rotas para Home, Catálogo, Página de Jogo, Minha Conta, SAC e Autenticação.
-- Catálogo inicial em `src/data/catalog.ts` com jogos disponíveis e "em breve" (pode editar/expandir manualmente).
+- Front-end em React + Vite com rotas para Home, Catálogo, Página de Jogo, Minha Conta, FAQ, Contato e Autenticação.
+- Catálogo inicial em `src/data/catalog.json` com jogos disponíveis e "em breve" (pode editar/expandir manualmente).
 - Integração com Supabase (Auth + Database) para catálogo, aluguéis, compras vitalícias e notificações.
 - Cobranças Pix via plugin oficial da OpenPix com sessões geradas por um Worker no Cloudflare.
 - Worker que expõe endpoints REST (`/api/checkout/session`, `/api/support/ticket`, `/api/notify/upcoming`, `/api/account/preferences`) e processa webhooks de pagamento.
@@ -18,7 +18,7 @@ Portal gamer dark focado em aluguel individual de mods e jogos criados para live
 
 ## Catálogo base (demo)
 
-- `src/data/catalog.ts` carrega três jogos exemplo:
+- `src/data/catalog.json` carrega três jogos exemplo:
   - **Bubbles TikTok** (aluguel ativo, já com preço e screenshots)
   - **Saturn Plinko** (em breve)
   - **Saturn Cleaner** (em breve)
@@ -126,10 +126,10 @@ Todos respondem JSON com CORS liberado para o domínio configurado.
 ├── src
 │   ├── App.tsx
 │   ├── components/ (Header, Footer, GameCard, AuthContext)
-│   ├── data/catalog.ts (catálogo base usado como fallback)
+│   ├── data/catalog.json (catálogo base usado como fallback)
 │   ├── hooks/useOpenPixCheckout.ts
 │   ├── lib/ (api.ts, env.ts, supabaseClient.ts)
-│   ├── pages/ (HomePage, LibraryPage, GamePage, AccountPage, SupportPage, AuthPage, NotFoundPage)
+│   ├── pages/ (HomePage, LibraryPage, GamePage, AccountPage, ContactPage, FaqPage, AuthPage, NotFoundPage)
 │   ├── styles/global.css
 │   ├── types/ (tipos de domínio)
 │   └── utils/ (formatCurrency, helpers de data)

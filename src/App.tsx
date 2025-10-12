@@ -7,7 +7,8 @@ import HomePage from './pages/HomePage';
 import LibraryPage from './pages/LibraryPage';
 import GamePage from './pages/GamePage';
 import AccountPage from './pages/AccountPage';
-import SupportPage from './pages/SupportPage';
+import ContactPage from './pages/ContactPage';
+import FaqPage from './pages/FaqPage';
 import AuthPage from './pages/AuthPage';
 import NotFoundPage from './pages/NotFoundPage';
 
@@ -54,7 +55,9 @@ const AppRoutes = () => (
         </ProtectedRoute>
       }
     />
-    <Route path="/sac" element={<SupportPage />} />
+    <Route path="/faq" element={<FaqPage />} />
+    <Route path="/contato" element={<ContactPage />} />
+    <Route path="/sac" element={<ContactPage />} />
     <Route path="/entrar" element={<AuthPage />} />
     <Route path="*" element={<NotFoundPage />} />
   </Routes>

@@ -1,163 +1,176 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import GameCard from '../components/GameCard';
 import { useAuth } from '../components/AuthContext';
-import { fetchCatalog } from '../lib/api';
+import { fetchCatalog, subscribeToUpcoming } from '../lib/api';
 import { formatCurrency } from '../utils/formatCurrency';
 import type { Game } from '../types';
 
 import './HomePage.css';
 
+const spotlightOrder = ['game-bubbles-tiktok', 'game-saturn-plinko', 'game-saturn-cleaner'];
+
 const HomePage = () => {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
+  const navigate = useNavigate();
   const [games, setGames] = useState<Game[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedTag, setSelectedTag] = useState<string>('todos');
-  const navigate = useNavigate();
+  const [feedback, setFeedback] = useState<string | null>(null);
 
   useEffect(() => {
-    let mounted = true;
+    let active = true;
     fetchCatalog()
       .then((catalog) => {
-        if (mounted) {
+        if (active) {
           setGames(catalog);
         }
       })
       .catch((err) => {
-        setError(err.message ?? 'Falha ao carregar catálogo.');
+        if (active) setError(err?.message ?? 'Não foi possível carregar os jogos.');
       })
       .finally(() => {
-        if (mounted) setLoading(false);
+        if (active) setLoading(false);
       });
 
     return () => {
-      mounted = false;
+      active = false;
     };
   }, []);
 
-  const featured = useMemo(() => games.filter((game) => game.featured).slice(0, 3), [games]);
-  const availableGames = useMemo(() => games.filter((game) => game.status === 'available'), [games]);
-  const tags = useMemo(() => {
-    const values = new Set<string>();
-    games.forEach((game) => game.tags.forEach((tag) => values.add(tag)));
-    return ['todos', ...Array.from(values)];
-  }, [games]);
+  const spotlight = useMemo(
+    () =>
+      spotlightOrder
+        .map((id) => games.find((game) => game.id === id) ?? null)
+        .filter((game): game is Game => Boolean(game)),
+    [games],
+  );
 
-  const filteredTrending = useMemo(() => {
-    if (selectedTag === 'todos') return availableGames.slice(0, 6);
-    return availableGames.filter((game) => game.tags.includes(selectedTag)).slice(0, 6);
-  }, [availableGames, selectedTag]);
+  const availableTotal = useMemo(() => games.filter((game) => game.status === 'available').length, [games]);
+  const comingSoonTotal = useMemo(() => games.filter((game) => game.status === 'coming_soon').length, [games]);
 
-  const upcoming = useMemo(() => games.filter((game) => game.status === 'coming_soon').slice(0, 4), [games]);
+  function handlePlay(game: Game) {
+    setFeedback(null);
+    if (game.status === 'coming_soon') {
+      navigate(`/jogos/${game.slug}`);
+      return;
+    }
+
+    const destination = `/jogos/${game.slug}?checkout=1`;
+    if (!user) {
+      navigate(`/entrar?next=${encodeURIComponent(destination)}`);
+      return;
+    }
+    navigate(destination);
+  }
+
+  async function handleNotify(game: Game) {
+    setFeedback(null);
+    if (!user?.email) {
+      navigate(`/entrar?next=${encodeURIComponent(`/jogos/${game.slug}`)}`);
+      return;
+    }
+
+    try {
+      await subscribeToUpcoming(game.id, user.email, session?.access_token);
+      setFeedback('Tudo certo! Você será avisado por e-mail assim que o jogo for lançado.');
+    } catch (err: any) {
+      const message = err?.message ?? 'Não foi possível registrar seu interesse agora.';
+      if (message.includes('API base URL')) {
+        setFeedback('Configure a API (VITE_API_BASE_URL) para ativar os alertas de lançamento.');
+      } else {
+        setFeedback(message);
+      }
+    }
+  }
 
   return (
-    <div className="home">
-      <section className="home__dashboard">
-        <div className="home__panel">
-          <span className="home__badge">Portal Saturn Games</span>
-          <h1>
-            Bem-vindo {user?.email ? <strong>{user.email}</strong> : <strong>streamer</strong>}!
-          </h1>
+    <div className="dashboard">
+      <section className="dashboard__hero">
+        <div className="dashboard__intro">
+          <span className="dashboard__badge">Saturn Games</span>
+          <h1>Experiências gamer para dominar o TikTok</h1>
           <p>
-            Gerencie seus aluguéis, descubra novidades e mantenha sua audiência presa na live com experiências
-            interativas pensadas para o TikTok.
+            Alugue jogos interativos individuais, conecte com o launcher oficial e transforme engajamento em performance nas suas
+            lives.
           </p>
-          <div className="home__panel-actions">
+          <div className="dashboard__cta">
             <button type="button" onClick={() => navigate('/jogos')}>
               Explorar catálogo
             </button>
-            <button type="button" onClick={() => navigate('/minha-conta')} className="secondary">
+            <button type="button" className="secondary" onClick={() => navigate('/minha-conta')}>
               Minha conta
             </button>
           </div>
-          <dl className="home__metrics">
-            <div>
-              <dt>Integração segura</dt>
-              <dd>OpenPix + Supabase</dd>
-            </div>
-            <div>
-              <dt>Modo TikTok</dt>
-              <dd>Compatível com lives</dd>
-            </div>
-            <div>
-              <dt>Suporte</dt>
-              <dd>Equipe Saturn Games</dd>
-            </div>
-          </dl>
+          <ul className="dashboard__metrics">
+            <li>
+              <strong>{availableTotal}</strong>
+              <span>Jogos disponíveis</span>
+            </li>
+            <li>
+              <strong>{comingSoonTotal}</strong>
+              <span>Lançamentos em breve</span>
+            </li>
+            <li>
+              <strong>Pix instantâneo</strong>
+              <span>Pagamento seguro com OpenPix</span>
+            </li>
+          </ul>
+          {feedback && <p className="dashboard__feedback">{feedback}</p>}
         </div>
-        <div className="home__spotlight" aria-live="polite">
-          <header>
-            <h2>Jogos em destaque</h2>
-            <p>Escolha um título e gere a cobrança Pix em segundos.</p>
-          </header>
-          <div className="home__spotlight-grid">
-            {loading && <div className="home__loading">Carregando catálogo...</div>}
-            {error && <div className="home__error">{error}</div>}
-            {!loading && !error &&
-              featured.map((game) => (
-                <button
-                  key={game.id}
-                  type="button"
-                  className="home__tile"
-                  onClick={() => navigate(`/jogos/${game.slug}`)}
-                >
-                  <span className="home__tile-status">{game.status === 'available' ? 'Disponível' : 'Em breve'}</span>
-                  <strong>{game.title}</strong>
-                  <span>{game.shortDescription ?? 'Saiba tudo na página do jogo.'}</span>
+        <div className="dashboard__cards">
+          {loading && <div className="dashboard__state">Carregando catálogo...</div>}
+          {error && <div className="dashboard__state is-error">{error}</div>}
+          {!loading && !error && spotlight.length === 0 && (
+            <div className="dashboard__state">Catálogo em preparação. Volte em breve!</div>
+          )}
+          {!loading && !error &&
+            spotlight.map((game) => {
+              const cover = game.assets.find((asset) => asset.kind === 'cover') ?? game.assets[0];
+              const isAvailable = game.status === 'available';
+              return (
+                <article key={game.id} className={`dashboard-card ${isAvailable ? 'is-available' : 'is-soon'}`}>
+                  <header>
+                    <span>{isAvailable ? 'Disponível agora' : 'Lançamento em breve'}</span>
+                    <h2>{game.title}</h2>
+                    <p>{game.shortDescription}</p>
+                  </header>
+                  {cover && (
+                    <div className="dashboard-card__art">
+                      <img src={cover.url} alt={`Arte de ${game.title}`} loading="lazy" />
+                    </div>
+                  )}
                   <footer>
-                    <span>
-                      {game.status === 'available'
-                        ? formatCurrency(game.priceCents / 100)
-                        : 'Aguardando lançamento'}
-                    </span>
-                    <span>{game.rentalDurationDays} dias</span>
+                    {isAvailable ? (
+                      <>
+                        <div className="dashboard-card__price">
+                          <strong>{formatCurrency(game.priceCents / 100)}</strong>
+                          <span>{game.rentalDurationDays} dias de acesso</span>
+                        </div>
+                        <button type="button" onClick={() => handlePlay(game)}>
+                          Jogar agora
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <div className="dashboard-card__soon">
+                          <span>Assine o alerta para receber o convite do beta fechado.</span>
+                        </div>
+                        <div className="dashboard-card__actions">
+                          <button type="button" onClick={() => handleNotify(game)}>
+                            Quero ser avisado
+                          </button>
+                          <button type="button" className="ghost" onClick={() => navigate(`/jogos/${game.slug}`)}>
+                            Ver detalhes
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </footer>
-                </button>
-              ))}
-            {!loading && !error && featured.length === 0 && (
-              <p className="home__empty">Nenhum jogo em destaque no momento. Explore o catálogo completo.</p>
-            )}
-          </div>
+                </article>
+              );
+            })}
         </div>
       </section>
-
-      <section className="home__trending">
-        <div className="home__section-header">
-          <h2>Populares entre criadores</h2>
-          <div className="home__filters">
-            {tags.map((tag) => (
-              <button
-                key={tag}
-                type="button"
-                className={selectedTag === tag ? 'active' : ''}
-                onClick={() => setSelectedTag(tag)}
-              >
-                {tag === 'todos' ? 'Todos' : tag}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="home__grid">
-          {filteredTrending.map((game) => (
-            <GameCard key={game.id} game={game} onPrimaryAction={() => navigate(`/jogos/${game.slug}`)} />
-          ))}
-        </div>
-      </section>
-
-      {upcoming.length > 0 && (
-        <section className="home__upcoming">
-          <div className="home__section-header">
-            <h2>Em breve no portal</h2>
-            <p>Ative alertas para ser o primeiro a testar quando lançarmos.</p>
-          </div>
-          <div className="home__grid">
-            {upcoming.map((game) => (
-              <GameCard key={game.id} game={game} onPrimaryAction={() => navigate(`/jogos/${game.slug}`)} />
-            ))}
-          </div>
-        </section>
-      )}
     </div>
   );
 };

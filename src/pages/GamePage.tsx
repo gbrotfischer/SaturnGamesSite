@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../components/AuthContext';
 import {
   fetchActiveRentals,
@@ -18,11 +18,13 @@ const GamePage = () => {
   const { slug } = useParams<{ slug: string }>();
   const { user, session } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [game, setGame] = useState<Game | null>(null);
   const [rental, setRental] = useState<RentalWithGame | null>(null);
   const [loading, setLoading] = useState(true);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const { openCharge, status: checkoutStatus, error: checkoutError } = useOpenPixCheckout();
+  const [autoCheckoutTriggered, setAutoCheckoutTriggered] = useState(false);
 
   useEffect(() => {
     if (!slug) return;
@@ -60,34 +62,43 @@ const GamePage = () => {
     [game],
   );
 
-  async function handleCheckout(mode: 'rental' | 'lifetime') {
-    if (!game) return;
-    if (!user?.email || !session?.access_token) {
-      navigate('/entrar');
-      return;
-    }
+  const handleCheckout = useCallback(
+    async (mode: 'rental' | 'lifetime') => {
+      if (!game) return;
+      if (!user?.email || !session?.access_token) {
+        const destination = `/jogos/${game.slug}?checkout=1`;
+        navigate(`/entrar?next=${encodeURIComponent(destination)}`);
+        return;
+      }
 
-    try {
-      const sessionInfo = await requestCheckoutSession(game.id, mode, session.access_token);
-      const customerName =
-        typeof user.user_metadata?.full_name === 'string' ? user.user_metadata.full_name : undefined;
-      openCharge({
-        valueCents: sessionInfo.valueCents,
-        correlationId: sessionInfo.correlationId,
-        description: `${game.title} • ${mode === 'rental' ? 'Aluguel' : 'Compra vitalícia'}`,
-        customer: { email: user.email, name: customerName },
-        expiresIn: sessionInfo.expiresIn,
-      });
-      setStatusMessage('Cobranca Pix aberta. Assim que o pagamento for confirmado liberaremos o acesso.');
-    } catch (err: any) {
-      setStatusMessage(err?.message ?? 'Não foi possível gerar a cobrança.');
-    }
-  }
+      try {
+        const sessionInfo = await requestCheckoutSession(game.id, mode, session.access_token);
+        const customerName =
+          typeof user.user_metadata?.full_name === 'string' ? user.user_metadata.full_name : undefined;
+        openCharge({
+          valueCents: sessionInfo.valueCents,
+          correlationId: sessionInfo.correlationId,
+          description: `${game.title} • ${mode === 'rental' ? 'Aluguel' : 'Compra vitalícia'}`,
+          customer: { email: user.email, name: customerName },
+          expiresIn: sessionInfo.expiresIn,
+        });
+        setStatusMessage('Cobranca Pix aberta. Assim que o pagamento for confirmado liberaremos o acesso.');
+      } catch (err: any) {
+        const message = err?.message ?? 'Não foi possível gerar a cobrança.';
+        if (message.includes('API base URL')) {
+          setStatusMessage('Configure VITE_API_BASE_URL para gerar as cobranças via Worker.');
+        } else {
+          setStatusMessage(message);
+        }
+      }
+    },
+    [game, navigate, openCharge, session?.access_token, user?.email, user?.user_metadata?.full_name],
+  );
 
   async function handleNotify() {
     if (!game) return;
     if (!user?.email) {
-      navigate('/entrar');
+      navigate(`/entrar?next=${encodeURIComponent(`/jogos/${game.slug}`)}`);
       return;
     }
 
@@ -95,9 +106,24 @@ const GamePage = () => {
       await subscribeToUpcoming(game.id, user.email, session?.access_token);
       setStatusMessage('Avisaremos por e-mail assim que o jogo for lançado.');
     } catch (err: any) {
-      setStatusMessage(err?.message ?? 'Não foi possível registrar o alerta.');
+      const message = err?.message ?? 'Não foi possível registrar o alerta.';
+      if (message.includes('API base URL')) {
+        setStatusMessage('Configure VITE_API_BASE_URL para ativar os alertas de lançamento.');
+      } else {
+        setStatusMessage(message);
+      }
     }
   }
+
+  useEffect(() => {
+    if (!game || autoCheckoutTriggered) return;
+    const params = new URLSearchParams(location.search);
+    const shouldCheckout = params.get('checkout') === '1';
+    if (shouldCheckout && game.status === 'available') {
+      setAutoCheckoutTriggered(true);
+      void handleCheckout('rental');
+    }
+  }, [autoCheckoutTriggered, game, handleCheckout, location.search]);
 
   if (loading) {
     return <div className="game__loading">Carregando jogo...</div>;

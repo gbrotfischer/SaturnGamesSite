@@ -41,10 +41,10 @@ const Footer = () => {
             <h4>Suporte</h4>
             <ul>
               <li>
-                <a href="mailto:support@saturngames.win">support@saturngames.win</a>
+                <a href="/faq">Perguntas frequentes</a>
               </li>
               <li>
-                <a href="/sac">Central de ajuda</a>
+                <a href="/contato">Fale conosco</a>
               </li>
               <li>
                 <a href="https://status.saturngames.win" target="_blank" rel="noreferrer">

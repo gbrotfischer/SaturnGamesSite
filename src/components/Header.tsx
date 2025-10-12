@@ -7,7 +7,8 @@ import './Header.css';
 const navLinks = [
   { to: '/', label: 'Início', end: true },
   { to: '/jogos', label: 'Catálogo' },
-  { to: '/sac', label: 'Suporte' },
+  { to: '/faq', label: 'FAQ' },
+  { to: '/contato', label: 'Contato' },
 ];
 
 const Header = () => {

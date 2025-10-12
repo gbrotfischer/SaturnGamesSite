@@ -2,35 +2,60 @@ import './FaqPage.css';
 
 const faqs = [
   {
-    question: 'Como funciona a autenticação?',
+    question: 'Como funciona o aluguel individual?',
     answer:
-      'Usamos Supabase Auth. Você pode entrar com e-mail e senha ou Google. O token fica salvo no navegador para manter sua sessão.'
+      'Escolha o jogo, confirme o Pix e o acesso é liberado automaticamente pelo nosso Worker em poucos segundos.',
   },
   {
-    question: 'Quando o pagamento é confirmado?',
+    question: 'Posso testar antes de assinar?',
     answer:
-      'Assim que a OpenPix envia o webhook de pagamento confirmado, nosso Worker valida a assinatura e atualiza sua licença no Supabase.'
+      'Oferecemos vídeos demonstrativos, changelog e suporte para tirar dúvidas antes do pagamento. Trials podem ser liberados em campanhas específicas.',
   },
   {
-    question: 'Posso cancelar quando quiser?',
+    question: 'Vocês integram com lives do TikTok?',
     answer:
-      'Sim. Basta cancelar a recorrência no seu banco. Sua licença permanecerá ativa até o fim do período atual.'
-  }
+      'Sim! Todos os títulos trazem guia de integração para TikTok, incluindo configurações de chat, eventos e ajustes visuais.',
+  },
+  {
+    question: 'O que acontece quando o aluguel expira?',
+    answer:
+      'Você recebe alertas por e-mail. Caso não renove, o launcher bloqueia o acesso automaticamente até um novo pagamento.',
+  },
+  {
+    question: 'Quais formas de pagamento estão disponíveis?',
+    answer:
+      'Utilizamos Pix via OpenPix para liberação instantânea. Cartão e boleto estão em avaliação para lançamentos futuros.',
+  },
 ];
 
 const FaqPage = () => {
   return (
     <div className="faq">
-      <h1>FAQ Saturn Games</h1>
-      <p>Perguntas frequentes sobre assinatura, pagamentos e acesso.</p>
-      <div className="faq__list">
-        {faqs.map((faq) => (
-          <article key={faq.question}>
-            <h2>{faq.question}</h2>
-            <p>{faq.answer}</p>
+      <header className="faq__hero">
+        <span className="faq__badge">FAQ</span>
+        <h1>Perguntas frequentes</h1>
+        <p>
+          Reunimos as principais dúvidas sobre aluguéis, pagamentos e suporte. Precisa de algo mais específico? Acesse a página
+          de contato e abra um chamado.
+        </p>
+      </header>
+
+      <section className="faq__list" aria-label="Perguntas frequentes">
+        {faqs.map((item) => (
+          <article key={item.question} className="faq__item">
+            <h2>{item.question}</h2>
+            <p>{item.answer}</p>
           </article>
         ))}
-      </div>
+      </section>
+
+      <section className="faq__cta">
+        <h2>Não encontrou a resposta?</h2>
+        <p>Fale com nosso time gamer e receba acompanhamento personalizado.</p>
+        <a className="faq__button" href="/contato">
+          Ir para contato
+        </a>
+      </section>
     </div>
   );
 };
