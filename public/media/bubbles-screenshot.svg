@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#1e293b" />
+    </linearGradient>
+    <linearGradient id="bar" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#a855f7" />
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="720" rx="32" fill="url(#bg)" />
+  <g fill="#1f2937" opacity="0.9">
+    <rect x="60" y="60" width="300" height="520" rx="24" />
+    <rect x="400" y="60" width="820" height="320" rx="24" />
+    <rect x="400" y="410" width="820" height="170" rx="24" />
+  </g>
+  <g transform="translate(100 120)">
+    <circle cx="60" cy="60" r="48" fill="#38bdf8" opacity="0.45" />
+    <circle cx="160" cy="180" r="60" fill="#a855f7" opacity="0.45" />
+    <circle cx="220" cy="60" r="38" fill="#f472b6" opacity="0.55" />
+  </g>
+  <text x="440" y="150" fill="#f8fafc" font-family="'Orbitron', 'Segoe UI', sans-serif" font-size="56" font-weight="700">Ranking ao vivo</text>
+  <rect x="440" y="190" width="620" height="18" rx="9" fill="#111827" />
+  <rect x="440" y="190" width="380" height="18" rx="9" fill="url(#bar)" />
+  <text x="440" y="260" fill="#cbd5f5" font-family="'Inter', sans-serif" font-size="32">@player01  12.450 pts</text>
+  <text x="440" y="310" fill="#94a3b8" font-family="'Inter', sans-serif" font-size="28">Interações fazem bolhas crescerem e disputar espaço</text>
+  <text x="440" y="470" fill="#38bdf8" font-family="'Inter', sans-serif" font-size="28" letter-spacing="0.1em">LIVE MODE</text>
+  <text x="440" y="520" fill="#f8fafc" font-family="'Inter', sans-serif" font-size="38" font-weight="700">Bubbles TikTok</text>
+  <text x="440" y="570" fill="#94a3b8" font-family="'Inter', sans-serif" font-size="26">Configurações ao vivo, temas e alertas para a comunidade</text>
+</svg>
