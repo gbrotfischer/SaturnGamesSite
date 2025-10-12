@@ -20,3 +20,11 @@ export function getSupabaseClient() {
 
   return cachedClient;
 }
+
+/**
+ * Convenience export kept for legacy imports that previously consumed a
+ * singleton `supabase` client. It resolves lazily so that environments
+ * without Supabase credentials can still load the bundle while
+ * TypeScript consumers regain the familiar named export.
+ */
+export const supabase: SupabaseClient | null = getSupabaseClient();
