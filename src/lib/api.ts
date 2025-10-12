@@ -1,4 +1,4 @@
-import { getSupabaseClient } from './supabaseClient';
+import { getSupabaseClient, hasSupabaseCredentials } from './supabaseClient';
 import { env } from './env';
 import type {
   CheckoutMode,
@@ -135,11 +135,11 @@ function mapGame(raw: RawGame): Game {
 }
 
 export async function fetchCatalog() {
-  const supabase = getSupabaseClient();
-  if (!supabase) {
+  if (!hasSupabaseCredentials()) {
     return loadLocalCatalog();
   }
 
+  const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('games')
     .select(GAME_SELECT)
@@ -159,13 +159,12 @@ export async function fetchCatalog() {
 }
 
 export async function fetchGameBySlug(slug: string) {
-  const supabase = getSupabaseClient();
-
-  if (!supabase) {
+  if (!hasSupabaseCredentials()) {
     const localCatalog = await loadLocalCatalog();
     return localCatalog.find((game) => game.slug === slug) ?? null;
   }
 
+  const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('games')
     .select(GAME_SELECT)
@@ -187,11 +186,11 @@ export async function fetchGameBySlug(slug: string) {
 }
 
 export async function fetchActiveRentals(userId: string): Promise<RentalWithGame[]> {
-  const supabase = getSupabaseClient();
-  if (!supabase) {
+  if (!hasSupabaseCredentials()) {
     return [];
   }
 
+  const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('rentals')
     .select(`id, user_id, game_id, starts_at, expires_at, status, payment_ref, mode, game:games(${GAME_SELECT})`)
@@ -218,11 +217,11 @@ export async function fetchActiveRentals(userId: string): Promise<RentalWithGame
 }
 
 export async function fetchPurchases(userId: string): Promise<PurchaseWithGame[]> {
-  const supabase = getSupabaseClient();
-  if (!supabase) {
+  if (!hasSupabaseCredentials()) {
     return [];
   }
 
+  const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('purchases')
     .select(`id, user_id, game_id, purchased_at, payment_ref, game:games(${GAME_SELECT})`)
@@ -246,14 +245,14 @@ export async function fetchPurchases(userId: string): Promise<PurchaseWithGame[]
 }
 
 export async function fetchNotificationPreferences(userId: string): Promise<NotificationPreferences> {
-  const supabase = getSupabaseClient();
-  if (!supabase) {
+  if (!hasSupabaseCredentials()) {
     return {
       emailReleaseAlerts: true,
       emailExpiryAlerts: true,
     };
   }
 
+  const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('user_notifications')
     .select('email_release_alerts, email_expiry_alerts')

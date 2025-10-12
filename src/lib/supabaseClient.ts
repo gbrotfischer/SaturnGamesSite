@@ -4,24 +4,39 @@ import { env } from './env';
 let cachedClient: SupabaseClient | null = null;
 let fallbackClient: SupabaseClient | null = null;
 
-export const hasSupabaseCredentials = Boolean(env.supabaseUrl && env.supabaseAnonKey);
-
-export function getSupabaseClient() {
-  if (!hasSupabaseCredentials) {
-    return null;
+function normalizeSupabaseAvailability(): boolean {
+  if (!env.supabaseUrl || !env.supabaseAnonKey) {
+    return false;
   }
 
-  if (!cachedClient) {
-    cachedClient = createClient(env.supabaseUrl!, env.supabaseAnonKey!, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
+  if (typeof window !== 'undefined') {
+    try {
+      const configuredHost = new URL(env.supabaseUrl).host;
+      const currentHost = window.location.host;
+
+      if (configuredHost === currentHost) {
+        console.warn(
+          'Supabase URL parece apontar para o mesmo domínio do site. Ignorando credenciais para evitar chamadas inválidas.',
+        );
+        return false;
       }
-    });
+    } catch (error) {
+      console.warn('Não foi possível interpretar SUPABASE_URL. Verifique o valor informado.', error);
+      return false;
+    }
   }
 
-  return cachedClient;
+  return true;
+}
+
+const initialAvailability = normalizeSupabaseAvailability();
+
+export function hasSupabaseCredentials(): boolean {
+  if (typeof window === 'undefined') {
+    return initialAvailability;
+  }
+
+  return normalizeSupabaseAvailability();
 }
 
 function createFallbackClient(): SupabaseClient {
@@ -39,10 +54,27 @@ function createFallbackClient(): SupabaseClient {
   return fallbackClient;
 }
 
+export function getSupabaseClient(): SupabaseClient {
+  if (!hasSupabaseCredentials()) {
+    return createFallbackClient();
+  }
+
+  if (!cachedClient) {
+    cachedClient = createClient(env.supabaseUrl!, env.supabaseAnonKey!, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
+    });
+  }
+
+  return cachedClient;
+}
+
 /**
  * Convenience export kept for legacy imports that previously consumed a
  * singleton `supabase` client. It resolves lazily so that environments
- * without Supabase credentials can still load the bundle while
- * TypeScript consumers regain the familiar named export.
+ * sem Supabase fiquem consistentes ao chamar o bundle.
  */
-export const supabase: SupabaseClient = getSupabaseClient() ?? createFallbackClient();
+export const supabase: SupabaseClient = getSupabaseClient();

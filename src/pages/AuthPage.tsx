@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { getSupabaseClient } from '../lib/supabaseClient';
+import { getSupabaseClient, hasSupabaseCredentials } from '../lib/supabaseClient';
 import { useAuth } from '../components/AuthContext';
 
 import './AuthPage.css';
@@ -42,10 +42,10 @@ const AuthPage = () => {
   });
 
   const supabase = getSupabaseClient();
-  const authDisabled = !supabase;
+  const authDisabled = !hasSupabaseCredentials();
 
   async function onSubmit(values: AuthForm) {
-    if (!supabase) {
+    if (!hasSupabaseCredentials()) {
       setMessage('Autenticação desativada neste ambiente. Configure o Supabase para habilitar o login.');
       return;
     }
@@ -79,7 +79,7 @@ const AuthPage = () => {
 
   async function signInWithGoogle() {
     setMessage(null);
-    if (!supabase) {
+    if (!hasSupabaseCredentials()) {
       setMessage('Autenticação via Google indisponível sem configurar o Supabase.');
       return;
     }

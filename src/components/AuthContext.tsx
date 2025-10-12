@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
-import { getSupabaseClient } from '../lib/supabaseClient';
+import { getSupabaseClient, hasSupabaseCredentials } from '../lib/supabaseClient';
 
 interface AuthContextValue {
   user: User | null;
@@ -22,13 +22,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const supabase = getSupabaseClient();
-    if (!supabase) {
+    if (!hasSupabaseCredentials()) {
       setLoading(false);
       return;
     }
 
-    const client = supabase;
+    const client = getSupabaseClient();
 
     let isMounted = true;
 
@@ -62,22 +61,22 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       session,
       loading,
       signOut: async () => {
-        const supabase = getSupabaseClient();
-        if (!supabase) return;
-        await supabase.auth.signOut();
+        if (!hasSupabaseCredentials()) return;
+        const client = getSupabaseClient();
+        await client.auth.signOut();
         setSession(null);
         setUser(null);
       },
       refreshSession: async () => {
-        const supabase = getSupabaseClient();
-        if (!supabase) {
+        if (!hasSupabaseCredentials()) {
           setSession(null);
           setUser(null);
           return;
         }
+        const client = getSupabaseClient();
         const {
           data: { session: refreshed }
-        } = await supabase.auth.getSession();
+        } = await client.auth.getSession();
         setSession(refreshed);
         setUser(refreshed?.user ?? null);
       }
