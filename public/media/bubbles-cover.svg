@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 960">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1e1b4b" />
+      <stop offset="50%" stop-color="#312e81" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+    <radialGradient id="bubble" cx="0.5" cy="0.5" r="0.6">
+      <stop offset="0%" stop-color="#a855f7" stop-opacity="0.85" />
+      <stop offset="45%" stop-color="#38bdf8" stop-opacity="0.65" />
+      <stop offset="100%" stop-color="#0ea5e9" stop-opacity="0.1" />
+    </radialGradient>
+  </defs>
+  <rect width="720" height="960" fill="url(#bg)" />
+  <g opacity="0.85">
+    <circle cx="200" cy="280" r="160" fill="url(#bubble)" />
+    <circle cx="520" cy="360" r="210" fill="url(#bubble)" />
+    <circle cx="360" cy="620" r="190" fill="url(#bubble)" />
+  </g>
+  <text x="60" y="740" fill="#f8fafc" font-family="'Orbitron', 'Segoe UI', sans-serif" font-size="72" font-weight="700">Bubbles</text>
+  <text x="60" y="820" fill="#cbd5f5" font-family="'Inter', 'Segoe UI', sans-serif" font-size="42" letter-spacing="0.32em">TIKTOK</text>
+</svg>
