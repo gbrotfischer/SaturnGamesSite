@@ -11,6 +11,7 @@ import ContactPage from './pages/ContactPage';
 import FaqPage from './pages/FaqPage';
 import AuthPage from './pages/AuthPage';
 import NotFoundPage from './pages/NotFoundPage';
+import SubscribePage from './pages/SubscribePage';
 
 import './App.css';
 
@@ -55,6 +56,7 @@ const AppRoutes = () => (
         </ProtectedRoute>
       }
     />
+    <Route path="/assine" element={<SubscribePage />} />
     <Route path="/faq" element={<FaqPage />} />
     <Route path="/contato" element={<ContactPage />} />
     <Route path="/sac" element={<ContactPage />} />
