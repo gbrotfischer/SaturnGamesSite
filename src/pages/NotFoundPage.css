@@ -1,0 +1,27 @@
+.notfound {
+  padding: 5rem 1.5rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+.notfound h1 {
+  font-size: 5rem;
+  margin: 0;
+  color: var(--sg-primary-strong);
+}
+
+.notfound p {
+  margin: 0;
+  color: var(--sg-text-muted);
+}
+
+.notfound a {
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--sg-radius-sm);
+  background: var(--sg-primary);
+  color: #fff;
+  font-weight: 600;
+}
