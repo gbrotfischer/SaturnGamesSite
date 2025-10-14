@@ -35,6 +35,7 @@ Portal gamer dark focado em aluguel individual de mods e jogos criados para live
 | `VITE_SUPABASE_URL` | URL do projeto Supabase |
 | `VITE_SUPABASE_ANON_KEY` | Chave `anon` do Supabase |
 | `VITE_TURNSTILE_SITE_KEY` | (Opcional) site key do Cloudflare Turnstile para o formulário do SAC |
+| `VITE_OPENPIX_APP_ID` | AppID público para recuperar detalhes da cobrança via Edge Function |
 
 ### Supabase Edge Functions (`supabase secrets set`)
 

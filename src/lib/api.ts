@@ -1,4 +1,5 @@
 import { getSupabaseClient, hasSupabaseCredentials } from './supabaseClient';
+import { env } from './env';
 import type {
   CheckoutMode,
   Game,
@@ -159,6 +160,72 @@ function extractCorrelationId(
       : null) ?? null) ??
     fallback
   );
+}
+
+const OPENPIX_NESTED_KEYS = ['openpix', 'charge', 'session', 'data', 'result', 'payload'];
+
+function pickStringFromRecord(
+  record: Record<string, unknown> | null | undefined,
+  ...keys: string[]
+): string | null {
+  if (!record || typeof record !== 'object') {
+    return null;
+  }
+
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  return null;
+}
+
+function collectOpenPixCandidates(payload: unknown): Record<string, unknown>[] {
+  const results: Record<string, unknown>[] = [];
+  const queue: unknown[] = [payload];
+  const visited = new Set<unknown>();
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current || typeof current !== 'object' || visited.has(current)) {
+      continue;
+    }
+
+    visited.add(current);
+    const record = current as Record<string, unknown>;
+    results.push(record);
+
+    for (const nestedKey of OPENPIX_NESTED_KEYS) {
+      if (nestedKey in record) {
+        queue.push(record[nestedKey]);
+      }
+    }
+  }
+
+  return results;
+}
+
+function readOpenPixField(payload: unknown, ...keys: string[]): string | null {
+  const candidates = collectOpenPixCandidates(payload);
+  for (const candidate of candidates) {
+    const value = pickStringFromRecord(candidate, ...keys);
+    if (value) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function readOpenPixFieldFromPayloads(payloads: unknown[], ...keys: string[]): string | null {
+  for (const payload of payloads) {
+    const value = readOpenPixField(payload, ...keys);
+    if (value) {
+      return value;
+    }
+  }
+  return null;
 }
 
 async function loadLocalCatalog() {
@@ -391,17 +458,29 @@ export async function createCheckoutSession(args: {
   }
 
   const payload = (data.session ?? data) as CheckoutSessionPayload;
-  const openpix = (data.openpix ?? {}) as Record<string, unknown>;
-
-  const readOpenPixString = (...keys: string[]) => {
-    for (const key of keys) {
-      const value = openpix[key];
-      if (typeof value === 'string' && value.trim().length > 0) {
-        return value;
-      }
-    }
-    return null;
-  };
+  const openPixPayloads: unknown[] = [
+    data,
+    (data as Record<string, unknown> | null | undefined)?.openpix,
+    (data as Record<string, unknown> | null | undefined)?.charge,
+    payload,
+  ];
+  const qrCodeImage = readOpenPixFieldFromPayloads(
+    openPixPayloads,
+    'qrCodeImage',
+    'qr_code_image',
+    'qrCodeBase64',
+    'qr_code_image_url',
+    'qr_code',
+    'qrcode',
+  );
+  const paymentLinkUrl = readOpenPixFieldFromPayloads(
+    openPixPayloads,
+    'paymentLinkUrl',
+    'payment_link_url',
+    'checkoutUrl',
+    'checkout_url',
+    'link',
+  );
 
   const sessionId = payload.session_id ?? payload.id ?? undefined;
   if (!sessionId) {
@@ -422,9 +501,80 @@ export async function createCheckoutSession(args: {
     gameId: payload.game_id ?? args.gameId,
     mode: payload.mode ?? args.mode,
     rentalDurationDays: payload.rental_duration_days ?? args.rentalDurationDays ?? null,
-    qrCodeImage: readOpenPixString('qrCodeImage', 'qr_code_image', 'qr_code_image_url'),
-    paymentLinkUrl: readOpenPixString('paymentLinkUrl', 'payment_link_url', 'checkoutUrl', 'checkout_url'),
+    qrCodeImage: qrCodeImage ?? null,
+    paymentLinkUrl: paymentLinkUrl ?? null,
     paymentRef: payload.payment_ref ?? null,
+  };
+}
+
+export async function fetchCheckoutPaymentArtifacts(
+  correlationId: string,
+): Promise<{ qrCodeImage: string | null; paymentLinkUrl: string | null } | null> {
+  if (!correlationId) {
+    return null;
+  }
+
+  if (!hasSupabaseCredentials()) {
+    return null;
+  }
+
+  const supabase = getSupabaseClient();
+  const body: Record<string, unknown> = {
+    correlation_id: correlationId,
+    session_id: correlationId,
+  };
+
+  if (env.openPixAppId) {
+    body.app_id = env.openPixAppId;
+  }
+
+  const { data, error } = await supabase.functions.invoke('openpix-checkout', { body });
+
+  if (error) {
+    throw new Error(error.message ?? 'Não foi possível recuperar detalhes da cobrança.');
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  const payloads: unknown[] = [data];
+  const recordData = data as Record<string, unknown>;
+  if (recordData?.session) {
+    payloads.push(recordData.session);
+  }
+  if (recordData?.openpix) {
+    payloads.push(recordData.openpix);
+  }
+  if (recordData?.charge) {
+    payloads.push(recordData.charge);
+  }
+
+  const qrCodeImage = readOpenPixFieldFromPayloads(
+    payloads,
+    'qrCodeImage',
+    'qr_code_image',
+    'qrCodeBase64',
+    'qr_code_image_url',
+    'qr_code',
+    'qrcode',
+  );
+  const paymentLinkUrl = readOpenPixFieldFromPayloads(
+    payloads,
+    'paymentLinkUrl',
+    'payment_link_url',
+    'checkoutUrl',
+    'checkout_url',
+    'link',
+  );
+
+  if (!qrCodeImage && !paymentLinkUrl) {
+    return null;
+  }
+
+  return {
+    qrCodeImage: qrCodeImage ?? null,
+    paymentLinkUrl: paymentLinkUrl ?? null,
   };
 }
 

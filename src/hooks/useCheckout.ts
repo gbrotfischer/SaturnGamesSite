@@ -3,6 +3,7 @@ import {
   createCheckoutSession,
   fetchActiveRentals,
   fetchCheckoutSession,
+  fetchCheckoutPaymentArtifacts,
 } from '../lib/api';
 import type { CheckoutMode, Game, RentalWithGame } from '../types';
 
@@ -92,6 +93,7 @@ export function useCheckout() {
   const contextRef = useRef<{ gameId: string; mode: CheckoutMode; userId: string } | null>(null);
   const pollTimerRef = useRef<number | null>(null);
   const sessionRef = useRef<CheckoutSessionData | null>(null);
+  const artifactAttemptsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     sessionRef.current = sessionData;
@@ -103,6 +105,55 @@ export function useCheckout() {
       pollTimerRef.current = null;
     }
   }, []);
+
+  const ensurePaymentArtifacts = useCallback(
+    async (snapshot?: CheckoutSessionData | null) => {
+      const target = snapshot ?? sessionRef.current;
+      if (!target || !target.correlationId || target.qrCodeImage) {
+        return;
+      }
+
+      const attemptKey = `${target.sessionId}:${target.correlationId}`;
+      if (artifactAttemptsRef.current.has(attemptKey)) {
+        return;
+      }
+
+      artifactAttemptsRef.current.add(attemptKey);
+
+      try {
+        const details = await fetchCheckoutPaymentArtifacts(target.correlationId);
+        if (!details) {
+          artifactAttemptsRef.current.delete(attemptKey);
+          return;
+        }
+
+        let updated: CheckoutSessionData | null = null;
+        setSessionData((previous) => {
+          if (!previous || previous.sessionId !== target.sessionId) {
+            return previous;
+          }
+
+          const next: CheckoutSessionData = {
+            ...previous,
+            qrCodeImage: details.qrCodeImage ?? previous.qrCodeImage ?? null,
+            paymentLinkUrl: details.paymentLinkUrl ?? previous.paymentLinkUrl ?? null,
+          };
+
+          updated = next;
+          return next;
+        });
+
+        if (updated) {
+          sessionRef.current = updated;
+          persistSession(updated);
+        }
+      } catch (fetchError) {
+        console.warn('Não foi possível obter detalhes do Pix na OpenPix.', fetchError);
+        artifactAttemptsRef.current.delete(attemptKey);
+      }
+    },
+    [],
+  );
 
   const refreshSession = useCallback(async () => {
     const context = contextRef.current;
@@ -117,15 +168,24 @@ export function useCheckout() {
         throw new Error('Sessão não encontrada.');
       }
 
-      setSessionData((previous) => {
-        if (!previous) return previous;
-        return {
-          ...previous,
-          status: latest.status,
-          expiresAt: latest.expiresAt ?? previous.expiresAt,
-          paymentRef: latest.paymentRef ?? previous.paymentRef ?? null,
-        };
-      });
+      const nextSession: CheckoutSessionData = {
+        ...currentSession,
+        status: latest.status,
+        expiresAt: latest.expiresAt ?? currentSession.expiresAt,
+        paymentRef: latest.paymentRef ?? currentSession.paymentRef ?? null,
+        qrCodeImage: latest.qrCodeImage ?? currentSession.qrCodeImage ?? null,
+        paymentLinkUrl: latest.paymentLinkUrl ?? currentSession.paymentLinkUrl ?? null,
+      };
+
+      setSessionData(nextSession);
+      sessionRef.current = nextSession;
+      persistSession(nextSession);
+
+      const attemptKey = `${nextSession.sessionId}:${nextSession.correlationId}`;
+      artifactAttemptsRef.current.delete(attemptKey);
+      if (!nextSession.qrCodeImage) {
+        void ensurePaymentArtifacts(nextSession);
+      }
 
       if (latest.status === 'paid') {
         const rentals = await fetchActiveRentals(context.userId);
@@ -142,12 +202,13 @@ export function useCheckout() {
         clearStoredSession(context.gameId, context.mode);
       } else {
         setStatus('pending');
+        artifactAttemptsRef.current.delete(attemptKey);
       }
     } catch (requestError: any) {
       const message = requestError?.message ?? 'Erro ao atualizar status da cobrança.';
       setError(message);
     }
-  }, [clearPolling]);
+  }, [clearPolling, ensurePaymentArtifacts]);
 
   const startPolling = useCallback(() => {
     clearPolling();
@@ -204,6 +265,7 @@ export function useCheckout() {
         contextRef.current = { gameId: game.id, mode, userId: user.id };
         persistSession(normalized);
         startPolling();
+        void ensurePaymentArtifacts(normalized);
       } catch (requestError: any) {
         const message = requestError?.message ?? 'Não foi possível iniciar o checkout.';
         setError(message);
@@ -211,7 +273,7 @@ export function useCheckout() {
         throw requestError;
       }
     },
-    [startPolling],
+    [ensurePaymentArtifacts, startPolling],
   );
 
   const resumeCheckout = useCallback(
@@ -230,11 +292,15 @@ export function useCheckout() {
       sessionRef.current = stored;
       setStatus('pending');
       contextRef.current = { gameId: game.id, mode, userId };
+      persistSession(stored);
       startPolling();
       void refreshSession();
+      if (!stored.qrCodeImage) {
+        void ensurePaymentArtifacts(stored);
+      }
       return true;
     },
-    [refreshSession, startPolling],
+    [ensurePaymentArtifacts, refreshSession, startPolling],
   );
 
   const closeCheckout = useCallback(() => {
