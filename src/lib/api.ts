@@ -85,6 +85,82 @@ type RawNotificationPrefs = {
   email_expiry_alerts: boolean | null;
 };
 
+type RawCheckoutSessionRow = {
+  session_id: string | null;
+  status: string | null;
+  payment_ref: string | null;
+  metadata: Record<string, unknown> | null;
+  expires_at: string | null;
+  game_id: string | null;
+  mode: CheckoutMode | null;
+  amount_cents: number | null;
+  amount: number | null;
+  rental_duration_days: number | null;
+};
+
+type CheckoutSessionPayload = {
+  session_id?: string | null;
+  id?: string | null;
+  status?: CheckoutSessionRecord['status'] | null;
+  metadata?: Record<string, unknown> | null;
+  correlation_id?: string | null;
+  amount_cents?: number | null;
+  amount?: number | null;
+  expires_at?: string | null;
+  expiration?: string | null;
+  game_id?: string | null;
+  mode?: CheckoutMode | null;
+  rental_duration_days?: number | null;
+  payment_ref?: string | null;
+};
+
+function extractCorrelationId(
+  session: CheckoutSessionPayload | RawCheckoutSessionRow | null | undefined,
+  fallback: string,
+) {
+  if (!session) return fallback;
+
+  const metadata =
+    session && 'metadata' in session
+      ? (session.metadata as Record<string, unknown> | null | undefined)
+      : undefined;
+
+  const fromMetadata = (() => {
+    if (!metadata || typeof metadata !== 'object') return null;
+
+    const metaRecord = metadata as Record<string, unknown>;
+
+    if ('correlation_id' in metaRecord && typeof metaRecord.correlation_id === 'string') {
+      return metaRecord.correlation_id;
+    }
+
+    if ('correlationId' in metaRecord && typeof metaRecord.correlationId === 'string') {
+      return metaRecord.correlationId;
+    }
+
+    const dashed = metaRecord['correlation-id'];
+    if (typeof dashed === 'string') {
+      return dashed;
+    }
+
+    return null;
+  })();
+
+  return (
+    fromMetadata ??
+    (('correlation_id' in (session as Record<string, unknown>)
+      ? ((session as Record<string, unknown>).correlation_id as string | null | undefined)
+      : null) ?? null) ??
+    (('correlationId' in (session as Record<string, unknown>)
+      ? ((session as Record<string, unknown>).correlationId as string | null | undefined)
+      : null) ?? null) ??
+    (('session_id' in (session as Record<string, unknown>)
+      ? ((session as Record<string, unknown>).session_id as string | null | undefined)
+      : null) ?? null) ??
+    fallback
+  );
+}
+
 async function loadLocalCatalog() {
   const module = await import('../data/catalog');
   return module.localCatalog;
@@ -314,16 +390,25 @@ export async function createCheckoutSession(args: {
     throw new Error(data?.error ?? 'Falha ao criar sessão de pagamento.');
   }
 
-  const payload = data.session ?? data;
-  const openpix = data.openpix ?? {};
+  const payload = (data.session ?? data) as CheckoutSessionPayload;
+  const openpix = (data.openpix ?? {}) as Record<string, unknown>;
 
-  const sessionId = payload.session_id ?? payload.id;
+  const readOpenPixString = (...keys: string[]) => {
+    for (const key of keys) {
+      const value = openpix[key];
+      if (typeof value === 'string' && value.trim().length > 0) {
+        return value;
+      }
+    }
+    return null;
+  };
+
+  const sessionId = payload.session_id ?? payload.id ?? undefined;
   if (!sessionId) {
     throw new Error('Resposta inválida do servidor: session_id ausente.');
   }
 
-  const correlationId =
-    payload.metadata?.correlation_id ?? payload.correlation_id ?? payload.session_id ?? sessionId;
+  const correlationId = extractCorrelationId(payload, sessionId);
   const amountCents =
     payload.amount_cents ?? payload.amount ?? data.amount ?? args.amountCents ?? 0;
   const status = (payload.status as CheckoutSessionRecord['status']) ?? 'pending';
@@ -337,8 +422,8 @@ export async function createCheckoutSession(args: {
     gameId: payload.game_id ?? args.gameId,
     mode: payload.mode ?? args.mode,
     rentalDurationDays: payload.rental_duration_days ?? args.rentalDurationDays ?? null,
-    qrCodeImage: openpix.qrCodeImage ?? openpix.qr_code_image ?? null,
-    paymentLinkUrl: openpix.paymentLinkUrl ?? openpix.payment_link_url ?? openpix.checkoutUrl ?? null,
+    qrCodeImage: readOpenPixString('qrCodeImage', 'qr_code_image', 'qr_code_image_url'),
+    paymentLinkUrl: readOpenPixString('paymentLinkUrl', 'payment_link_url', 'checkoutUrl', 'checkout_url'),
     paymentRef: payload.payment_ref ?? null,
   };
 }
@@ -363,20 +448,20 @@ export async function fetchCheckoutSession(sessionId: string): Promise<CheckoutS
     return null;
   }
 
-  const amount = data.amount_cents ?? data.amount ?? 0;
-  const correlationId =
-    data.metadata?.correlation_id ?? data.correlation_id ?? data.session_id ?? sessionId;
+  const sessionRow = data as RawCheckoutSessionRow;
+  const amount = sessionRow.amount_cents ?? sessionRow.amount ?? 0;
+  const correlationId = extractCorrelationId(sessionRow, sessionId);
 
   return {
-    sessionId: data.session_id ?? sessionId,
+    sessionId: sessionRow.session_id ?? sessionId,
     correlationId,
-    status: (data.status as CheckoutSessionRecord['status']) ?? 'pending',
+    status: (sessionRow.status as CheckoutSessionRecord['status']) ?? 'pending',
     amountCents: amount,
-    expiresAt: data.expires_at ?? null,
-    gameId: data.game_id ?? null,
-    mode: data.mode ?? 'rental',
-    rentalDurationDays: data.rental_duration_days ?? null,
-    paymentRef: data.payment_ref ?? null,
+    expiresAt: sessionRow.expires_at ?? null,
+    gameId: sessionRow.game_id ?? null,
+    mode: sessionRow.mode ?? 'rental',
+    rentalDurationDays: sessionRow.rental_duration_days ?? null,
+    paymentRef: sessionRow.payment_ref ?? null,
   };
 }
 
