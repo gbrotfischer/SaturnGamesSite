@@ -75,8 +75,8 @@ const HomePage = () => {
       setFeedback('Tudo certo! Você será avisado por e-mail assim que o jogo for lançado.');
     } catch (err: any) {
       const message = err?.message ?? 'Não foi possível registrar seu interesse agora.';
-      if (message.includes('API base URL')) {
-        setFeedback('Configure a API (VITE_API_BASE_URL) para ativar os alertas de lançamento.');
+      if (message.includes('Supabase')) {
+        setFeedback('Configure SUPABASE_URL e SUPABASE_ANON_KEY para ativar os alertas de lançamento.');
       } else {
         setFeedback(message);
       }

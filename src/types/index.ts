@@ -71,17 +71,6 @@ export interface PurchaseWithGame extends Purchase {
   game?: Game;
 }
 
-export interface CheckoutSession {
-  id: string;
-  gameId: string;
-  userId: string;
-  mode: CheckoutMode;
-  correlationId: string;
-  status: 'pending' | 'paid' | 'expired' | 'cancelled';
-  createdAt: string;
-  amountCents: number;
-}
-
 export interface SupportTicket {
   id: string;
   userId: string | null;

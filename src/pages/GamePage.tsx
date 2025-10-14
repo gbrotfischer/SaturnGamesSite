@@ -4,13 +4,13 @@ import { useAuth } from '../components/AuthContext';
 import {
   fetchActiveRentals,
   fetchGameBySlug,
-  requestCheckoutSession,
   subscribeToUpcoming,
 } from '../lib/api';
 import type { Game, RentalWithGame } from '../types';
 import { formatCurrency } from '../utils/formatCurrency';
 import { calculateDaysRemaining, formatDate, formatShortDate, isActiveRental } from '../utils/date';
-import { useOpenPixCheckout } from '../hooks/useOpenPixCheckout';
+import { useCheckout } from '../hooks/useCheckout';
+import CheckoutModal from '../components/CheckoutModal';
 
 import './GamePage.css';
 
@@ -23,7 +23,7 @@ const GamePage = () => {
   const [rental, setRental] = useState<RentalWithGame | null>(null);
   const [loading, setLoading] = useState(true);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const { openCharge, status: checkoutStatus, error: checkoutError } = useOpenPixCheckout();
+  const checkout = useCheckout();
   const [autoCheckoutTriggered, setAutoCheckoutTriggered] = useState(false);
 
   useEffect(() => {
@@ -47,14 +47,21 @@ const GamePage = () => {
   }, [slug, user?.id]);
 
   useEffect(() => {
-    if (checkoutError) {
-      setStatusMessage(checkoutError);
-    } else if (checkoutStatus === 'completed') {
+    if (checkout.error) {
+      setStatusMessage(checkout.error);
+    } else if (checkout.status === 'paid') {
       setStatusMessage('Pagamento confirmado! Atualizamos seu acesso em instantes.');
-    } else if (checkoutStatus === 'expired') {
+    } else if (checkout.status === 'expired') {
       setStatusMessage('Cobrança expirada. Gere uma nova cobrança se ainda quiser o jogo.');
     }
-  }, [checkoutStatus, checkoutError]);
+  }, [checkout.error, checkout.status]);
+
+  useEffect(() => {
+    if (!game || !checkout.rental) return;
+    if (checkout.rental.gameId === game.id) {
+      setRental(checkout.rental);
+    }
+  }, [checkout.rental, game]);
 
   const cover = useMemo(() => game?.assets.find((asset) => asset.kind === 'cover') ?? game?.assets[0], [game]);
   const screenshots = useMemo(
@@ -72,27 +79,24 @@ const GamePage = () => {
       }
 
       try {
-        const sessionInfo = await requestCheckoutSession(game.id, mode, session.access_token);
-        const customerName =
-          typeof user.user_metadata?.full_name === 'string' ? user.user_metadata.full_name : undefined;
-        openCharge({
-          valueCents: sessionInfo.valueCents,
-          correlationId: sessionInfo.correlationId,
-          description: `${game.title} • ${mode === 'rental' ? 'Aluguel' : 'Compra vitalícia'}`,
-          customer: { email: user.email, name: customerName },
-          expiresIn: sessionInfo.expiresIn,
+        await checkout.startCheckout({
+          game,
+          mode,
+          user: {
+            id: user.id,
+            email: user.email,
+            fullName:
+              typeof user.user_metadata?.full_name === 'string'
+                ? user.user_metadata.full_name
+                : undefined,
+          },
         });
-        setStatusMessage('Cobranca Pix aberta. Assim que o pagamento for confirmado liberaremos o acesso.');
+        setStatusMessage('Geramos a sessão Pix. Escaneie o QR code e aguarde a confirmação.');
       } catch (err: any) {
-        const message = err?.message ?? 'Não foi possível gerar a cobrança.';
-        if (message.includes('API base URL')) {
-          setStatusMessage('Configure VITE_API_BASE_URL para gerar as cobranças via Worker.');
-        } else {
-          setStatusMessage(message);
-        }
+        setStatusMessage(err?.message ?? 'Não foi possível gerar a cobrança.');
       }
     },
-    [game, navigate, openCharge, session?.access_token, user?.email, user?.user_metadata?.full_name],
+    [checkout, game, navigate, session?.access_token, user?.email, user?.id, user?.user_metadata?.full_name],
   );
 
   async function handleNotify() {
@@ -107,8 +111,8 @@ const GamePage = () => {
       setStatusMessage('Avisaremos por e-mail assim que o jogo for lançado.');
     } catch (err: any) {
       const message = err?.message ?? 'Não foi possível registrar o alerta.';
-      if (message.includes('API base URL')) {
-        setStatusMessage('Configure VITE_API_BASE_URL para ativar os alertas de lançamento.');
+      if (message.includes('Supabase')) {
+        setStatusMessage('Configure SUPABASE_URL e SUPABASE_ANON_KEY para ativar os alertas de lançamento.');
       } else {
         setStatusMessage(message);
       }
@@ -116,14 +120,24 @@ const GamePage = () => {
   }
 
   useEffect(() => {
-    if (!game || autoCheckoutTriggered) return;
+    if (!game || autoCheckoutTriggered || !user?.id) return;
     const params = new URLSearchParams(location.search);
     const shouldCheckout = params.get('checkout') === '1';
     if (shouldCheckout && game.status === 'available') {
       setAutoCheckoutTriggered(true);
       void handleCheckout('rental');
+      return;
     }
-  }, [autoCheckoutTriggered, game, handleCheckout, location.search]);
+
+    const resume = async () => {
+      const resumedRental = await checkout.resumeCheckout({ game, mode: 'rental', userId: user.id });
+      if (!resumedRental && game.isLifetimeAvailable) {
+        await checkout.resumeCheckout({ game, mode: 'lifetime', userId: user.id });
+      }
+    };
+
+    void resume();
+  }, [autoCheckoutTriggered, checkout, game, handleCheckout, location.search, user?.id]);
 
   if (loading) {
     return <div className="game__loading">Carregando jogo...</div>;
@@ -237,6 +251,16 @@ const GamePage = () => {
           ))}
         </section>
       )}
+      <CheckoutModal
+        open={checkout.isOpen}
+        onClose={checkout.closeCheckout}
+        onRefresh={checkout.refreshCheckout}
+        status={checkout.status}
+        session={checkout.session}
+        game={checkout.activeGame}
+        rental={checkout.rental}
+        error={checkout.error}
+      />
     </div>
   );
 };

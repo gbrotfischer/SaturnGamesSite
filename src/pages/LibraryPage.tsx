@@ -2,14 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import GameCard from '../components/GameCard';
 import { useAuth } from '../components/AuthContext';
-import {
-  fetchActiveRentals,
-  fetchCatalog,
-  requestCheckoutSession,
-  subscribeToUpcoming,
-} from '../lib/api';
+import { fetchActiveRentals, fetchCatalog, subscribeToUpcoming } from '../lib/api';
 import type { Game, RentalWithGame } from '../types';
-import { useOpenPixCheckout } from '../hooks/useOpenPixCheckout';
+import { useCheckout } from '../hooks/useCheckout';
+import CheckoutModal from '../components/CheckoutModal';
 
 import './LibraryPage.css';
 
@@ -23,7 +19,7 @@ const LibraryPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { openCharge, status: checkoutStatus, error: checkoutError } = useOpenPixCheckout();
+  const checkout = useCheckout();
 
   const searchQuery = searchParams.get('q')?.toLowerCase() ?? '';
   const genreFilter = searchParams.get('genre') ?? 'todos';
@@ -45,6 +41,31 @@ const LibraryPage = () => {
   }, []);
 
   useEffect(() => {
+    if (!user?.id || games.length === 0) return;
+
+    const resume = async () => {
+      for (const game of games) {
+        const resumed = await checkout.resumeCheckout({ game, mode: 'rental', userId: user.id });
+        if (resumed) {
+          return;
+        }
+        if (game.isLifetimeAvailable) {
+          const lifetime = await checkout.resumeCheckout({
+            game,
+            mode: 'lifetime',
+            userId: user.id,
+          });
+          if (lifetime) {
+            return;
+          }
+        }
+      }
+    };
+
+    void resume();
+  }, [checkout, games, user?.id]);
+
+  useEffect(() => {
     if (!user?.id) {
       setRentals([]);
       return;
@@ -53,19 +74,25 @@ const LibraryPage = () => {
     fetchActiveRentals(user.id)
       .then((records) => setRentals(records))
       .catch((err) => console.error('Erro ao carregar aluguéis', err));
-  }, [user?.id, checkoutStatus]);
+  }, [user?.id, checkout.status]);
 
   useEffect(() => {
-    if (checkoutError) {
-      setStatusMessage(checkoutError);
-    } else if (checkoutStatus === 'completed') {
+    if (checkout.error) {
+      setStatusMessage(checkout.error);
+    } else if (checkout.status === 'paid') {
       setStatusMessage('Pagamento confirmado! Aguarde alguns instantes para o acesso ser liberado.');
-    } else if (checkoutStatus === 'expired') {
+    } else if (checkout.status === 'expired') {
       setStatusMessage('Cobrança expirada. Gere uma nova cobrança para tentar novamente.');
-    } else if (checkoutStatus === 'closed') {
-      setStatusMessage('Cobrança fechada. Você pode gerar novamente quando desejar.');
     }
-  }, [checkoutStatus, checkoutError]);
+  }, [checkout.error, checkout.status]);
+
+  useEffect(() => {
+    if (!checkout.rental || !user?.id) return;
+    setRentals((current) => {
+      const existing = current.filter((item) => item.id !== checkout.rental!.id);
+      return [checkout.rental!, ...existing];
+    });
+  }, [checkout.rental, user?.id]);
 
   const genres = useMemo(() => {
     const values = new Set<string>();
@@ -117,23 +144,25 @@ const LibraryPage = () => {
   }
 
   async function handleCheckout(game: Game, mode: 'rental' | 'lifetime') {
-    if (!user?.email || !session?.access_token) {
+    if (!user?.email || !user?.id) {
       navigate('/entrar');
       return;
     }
 
     try {
-      const sessionInfo = await requestCheckoutSession(game.id, mode, session.access_token);
-      const customerName =
-        typeof user.user_metadata?.full_name === 'string' ? user.user_metadata.full_name : undefined;
-      openCharge({
-        valueCents: sessionInfo.valueCents,
-        correlationId: sessionInfo.correlationId,
-        description: `${game.title} • ${mode === 'rental' ? 'Aluguel' : 'Compra vitalícia'}`,
-        customer: { email: user.email, name: customerName },
-        expiresIn: sessionInfo.expiresIn,
+      await checkout.startCheckout({
+        game,
+        mode,
+        user: {
+          id: user.id,
+          email: user.email,
+          fullName:
+            typeof user.user_metadata?.full_name === 'string'
+              ? user.user_metadata.full_name
+              : undefined,
+        },
       });
-      setStatusMessage('Geramos a cobrança Pix. Conclua o pagamento no seu banco.');
+      setStatusMessage('Geramos a sessão Pix. Conclua o pagamento no seu banco.');
     } catch (err: any) {
       setStatusMessage(err?.message ?? 'Não foi possível iniciar o checkout.');
     }
@@ -237,6 +266,17 @@ const LibraryPage = () => {
           </div>
         </section>
       )}
+
+      <CheckoutModal
+        open={checkout.isOpen}
+        onClose={checkout.closeCheckout}
+        onRefresh={checkout.refreshCheckout}
+        status={checkout.status}
+        session={checkout.session}
+        game={checkout.activeGame}
+        rental={checkout.rental}
+        error={checkout.error}
+      />
     </div>
   );
 };

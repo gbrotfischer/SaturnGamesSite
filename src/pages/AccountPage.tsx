@@ -6,12 +6,12 @@ import {
   fetchCatalog,
   fetchNotificationPreferences,
   fetchPurchases,
-  requestCheckoutSession,
   updateNotificationPreferences,
 } from '../lib/api';
 import type { Game, NotificationPreferences, PurchaseWithGame, RentalWithGame } from '../types';
 import { formatShortDate, isActiveRental } from '../utils/date';
-import { useOpenPixCheckout } from '../hooks/useOpenPixCheckout';
+import { useCheckout } from '../hooks/useCheckout';
+import CheckoutModal from '../components/CheckoutModal';
 
 import './AccountPage.css';
 
@@ -23,7 +23,7 @@ const AccountDashboard = () => {
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const { openCharge, status: checkoutStatus, error: checkoutError } = useOpenPixCheckout();
+  const checkout = useCheckout();
 
   const loadCollections = useCallback(async () => {
     if (!user?.id) return;
@@ -48,27 +48,57 @@ const AccountDashboard = () => {
   }, [loadCollections]);
 
   useEffect(() => {
-    if (checkoutError) {
-      setMessage(checkoutError);
-    } else if (checkoutStatus === 'completed') {
+    if (!user?.id || games.length === 0) return;
+
+    const resume = async () => {
+      for (const game of games) {
+        const resumed = await checkout.resumeCheckout({ game, mode: 'rental', userId: user.id });
+        if (resumed) {
+          return;
+        }
+        if (game.isLifetimeAvailable) {
+          const lifetime = await checkout.resumeCheckout({
+            game,
+            mode: 'lifetime',
+            userId: user.id,
+          });
+          if (lifetime) {
+            return;
+          }
+        }
+      }
+    };
+
+    void resume();
+  }, [checkout, games, user?.id]);
+
+  useEffect(() => {
+    if (checkout.error) {
+      setMessage(checkout.error);
+    } else if (checkout.status === 'paid') {
       setMessage('Pagamento confirmado! Atualizaremos sua biblioteca em instantes.');
       loadCollections();
+    } else if (checkout.status === 'expired') {
+      setMessage('Cobrança expirada. Gere uma nova tentativa quando desejar.');
     }
-  }, [checkoutStatus, checkoutError, loadCollections]);
+  }, [checkout.error, checkout.status, loadCollections]);
 
   async function handleRenewal(rental: RentalWithGame) {
-    if (!session?.access_token || !rental.game) return;
+    if (!rental.game || !user?.id || !user?.email) return;
     try {
-      const info = await requestCheckoutSession(rental.gameId, rental.mode, session.access_token);
-      const customerName =
-        typeof user?.user_metadata?.full_name === 'string' ? user?.user_metadata.full_name : undefined;
-      openCharge({
-        valueCents: info.valueCents,
-        correlationId: info.correlationId,
-        description: `${rental.game.title} • Renovação`,
-        customer: { email: user?.email ?? '', name: customerName },
-        expiresIn: info.expiresIn,
+      await checkout.startCheckout({
+        game: rental.game,
+        mode: rental.mode,
+        user: {
+          id: user.id,
+          email: user.email,
+          fullName:
+            typeof user?.user_metadata?.full_name === 'string'
+              ? user.user_metadata.full_name
+              : undefined,
+        },
       });
+      setMessage('Geramos a sessão Pix para renovar o aluguel.');
     } catch (err: any) {
       setMessage(err?.message ?? 'Falha ao iniciar renovação.');
     }
@@ -230,6 +260,17 @@ const AccountDashboard = () => {
           <p>Carregando preferências...</p>
         )}
       </section>
+
+      <CheckoutModal
+        open={checkout.isOpen}
+        onClose={checkout.closeCheckout}
+        onRefresh={checkout.refreshCheckout}
+        status={checkout.status}
+        session={checkout.session}
+        game={checkout.activeGame}
+        rental={checkout.rental}
+        error={checkout.error}
+      />
     </div>
   );
 };

@@ -1,5 +1,4 @@
 import { getSupabaseClient, hasSupabaseCredentials } from './supabaseClient';
-import { env } from './env';
 import type {
   CheckoutMode,
   Game,
@@ -269,81 +268,203 @@ export async function fetchNotificationPreferences(userId: string): Promise<Noti
   };
 }
 
-export interface CheckoutSessionResponse {
+export type CheckoutSessionRecord = {
   sessionId: string;
   correlationId: string;
-  valueCents: number;
+  status: 'pending' | 'paid' | 'expired' | 'cancelled';
+  amountCents: number;
+  expiresAt?: string | null;
+  gameId?: string | null;
+  mode?: CheckoutMode;
+  rentalDurationDays?: number | null;
+  qrCodeImage?: string | null;
+  paymentLinkUrl?: string | null;
+  paymentRef?: string | null;
+};
+
+export async function createCheckoutSession(args: {
+  gameId: string;
   mode: CheckoutMode;
-  expiresIn: number;
-  gameTitle: string;
-  rentalDurationDays: number;
-  appId: string | null;
-}
-
-async function callWorker<T>(path: string, init: RequestInit & { token?: string } = {}) {
-  if (!env.apiBaseUrl) {
-    throw new Error('API base URL não configurada.');
+  userId: string;
+  email: string;
+  amountCents: number;
+  rentalDurationDays?: number;
+}): Promise<CheckoutSessionRecord> {
+  if (!hasSupabaseCredentials()) {
+    throw new Error('Configure SUPABASE_URL e SUPABASE_ANON_KEY para processar pagamentos.');
   }
 
-  const headers = new Headers(init.headers);
-  headers.set('Content-Type', 'application/json');
-  headers.set('Accept', 'application/json');
-
-  if (init.token) {
-    headers.set('Authorization', `Bearer ${init.token}`);
-  }
-
-  const response = await fetch(`${env.apiBaseUrl}${path}`, {
-    ...init,
-    headers,
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.functions.invoke('openpix-create-session', {
+    body: {
+      user_id: args.userId,
+      email: args.email,
+      game_id: args.gameId,
+      amount: args.amountCents,
+      mode: args.mode,
+      rental_duration_days: args.rentalDurationDays,
+    },
   });
 
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || 'Erro desconhecido na API');
+  if (error) {
+    throw new Error(error.message ?? 'Falha ao criar sessão de pagamento.');
   }
 
-  return (await response.json()) as T;
+  if (!data || (!data.ok && data.error)) {
+    throw new Error(data?.error ?? 'Falha ao criar sessão de pagamento.');
+  }
+
+  const payload = data.session ?? data;
+  const openpix = data.openpix ?? {};
+
+  const sessionId = payload.session_id ?? payload.id;
+  if (!sessionId) {
+    throw new Error('Resposta inválida do servidor: session_id ausente.');
+  }
+
+  const correlationId =
+    payload.metadata?.correlation_id ?? payload.correlation_id ?? payload.session_id ?? sessionId;
+  const amountCents =
+    payload.amount_cents ?? payload.amount ?? data.amount ?? args.amountCents ?? 0;
+  const status = (payload.status as CheckoutSessionRecord['status']) ?? 'pending';
+
+  return {
+    sessionId,
+    correlationId,
+    status,
+    amountCents,
+    expiresAt: payload.expires_at ?? payload.expiration ?? null,
+    gameId: payload.game_id ?? args.gameId,
+    mode: payload.mode ?? args.mode,
+    rentalDurationDays: payload.rental_duration_days ?? args.rentalDurationDays ?? null,
+    qrCodeImage: openpix.qrCodeImage ?? openpix.qr_code_image ?? null,
+    paymentLinkUrl: openpix.paymentLinkUrl ?? openpix.payment_link_url ?? openpix.checkoutUrl ?? null,
+    paymentRef: payload.payment_ref ?? null,
+  };
 }
 
-export async function requestCheckoutSession(
-  gameId: string,
-  mode: CheckoutMode,
-  token: string,
-) {
-  return callWorker<CheckoutSessionResponse>('/api/checkout/session', {
-    method: 'POST',
-    body: JSON.stringify({ gameId, mode }),
-    token,
-  });
+export async function fetchCheckoutSession(sessionId: string): Promise<CheckoutSessionRecord | null> {
+  if (!hasSupabaseCredentials()) {
+    throw new Error('Supabase não configurado.');
+  }
+
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from('checkout_sessions')
+    .select('session_id, status, payment_ref, metadata, expires_at, game_id, mode, amount_cents, amount, rental_duration_days')
+    .eq('session_id', sessionId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message ?? 'Não foi possível consultar a sessão.');
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  const amount = data.amount_cents ?? data.amount ?? 0;
+  const correlationId =
+    data.metadata?.correlation_id ?? data.correlation_id ?? data.session_id ?? sessionId;
+
+  return {
+    sessionId: data.session_id ?? sessionId,
+    correlationId,
+    status: (data.status as CheckoutSessionRecord['status']) ?? 'pending',
+    amountCents: amount,
+    expiresAt: data.expires_at ?? null,
+    gameId: data.game_id ?? null,
+    mode: data.mode ?? 'rental',
+    rentalDurationDays: data.rental_duration_days ?? null,
+    paymentRef: data.payment_ref ?? null,
+  };
 }
 
 export async function submitSupportTicket(
   input: { subject: string; message: string; turnstileToken?: string },
   token?: string,
 ) {
-  return callWorker<{ ticketId: string }>('/api/support/ticket', {
-    method: 'POST',
-    body: JSON.stringify(input),
-    ...(token ? { token } : {}),
-  });
+  if (!hasSupabaseCredentials()) {
+    throw new Error('Supabase não configurado para registrar chamados.');
+  }
+
+  const supabase = getSupabaseClient();
+  const payload: Record<string, unknown> = {
+    subject: input.subject,
+    message: input.message,
+  };
+
+  const { data: authData } = await supabase.auth.getUser();
+  if (authData?.user?.id) {
+    payload.user_id = authData.user.id;
+  }
+
+  const { data, error } = await supabase.from('tickets_support').insert(payload).select('id').single();
+
+  if (error) {
+    throw new Error(error.message ?? 'Não foi possível registrar o chamado.');
+  }
+
+  return { ticketId: data.id as string };
 }
 
-export async function subscribeToUpcoming(gameId: string, email?: string, token?: string) {
-  return callWorker<{ status: string }>('/api/notify/upcoming', {
-    method: 'POST',
-    body: JSON.stringify({ gameId, email }),
-    ...(token ? { token } : {}),
-  });
+export async function subscribeToUpcoming(gameId: string, email?: string, _token?: string) {
+  if (!hasSupabaseCredentials()) {
+    throw new Error('Supabase não configurado para registrar interesse.');
+  }
+
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from('releases_upcoming')
+    .select('id, notify_list')
+    .eq('game_id', gameId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message ?? 'Não foi possível registrar interesse.');
+  }
+
+  const list = new Set<string>((data?.notify_list as string[] | null) ?? []);
+  if (email) {
+    list.add(email.toLowerCase());
+  }
+
+  if (!data) {
+    throw new Error('Jogo não encontrado na lista de lançamentos.');
+  }
+
+  const { error: updateError } = await supabase
+    .from('releases_upcoming')
+    .update({ notify_list: Array.from(list) })
+    .eq('id', data.id);
+
+  if (updateError) {
+    throw new Error(updateError.message ?? 'Não foi possível atualizar a lista de interesse.');
+  }
+
+  return { status: 'ok' };
 }
 
-export async function updateNotificationPreferences(
-  prefs: NotificationPreferences,
-  token: string,
-) {
-  return callWorker<{ status: string }>('/api/account/preferences', {
-    method: 'POST',
-    body: JSON.stringify(prefs),
-    token,
+export async function updateNotificationPreferences(prefs: NotificationPreferences, _token: string) {
+  if (!hasSupabaseCredentials()) {
+    throw new Error('Supabase não configurado.');
+  }
+
+  const supabase = getSupabaseClient();
+  const { data: authData } = await supabase.auth.getUser();
+  if (!authData?.user?.id) {
+    throw new Error('É necessário estar autenticado para salvar preferências.');
+  }
+
+  const { error } = await supabase.from('user_notifications').upsert({
+    user_id: authData.user.id,
+    email_release_alerts: prefs.emailReleaseAlerts,
+    email_expiry_alerts: prefs.emailExpiryAlerts,
   });
+
+  if (error) {
+    throw new Error(error.message ?? 'Não foi possível salvar as preferências.');
+  }
+
+  return { status: 'ok' };
 }
