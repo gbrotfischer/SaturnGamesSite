@@ -1,0 +1,163 @@
+.subscribe {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+}
+
+.subscribe__header {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.subscribe__header h1 {
+  margin: 0;
+  font-size: 2.2rem;
+}
+
+.subscribe__header p {
+  margin: 0;
+  color: #475569;
+  line-height: 1.6;
+}
+
+.subscribe__plans {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.plan-card {
+  background: #fff;
+  border-radius: 18px;
+  padding: 2rem 1.5rem;
+  box-shadow: 0 20px 45px -35px rgba(79, 70, 229, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.plan-card:hover {
+  transform: translateY(-4px);
+}
+
+.plan-card.active {
+  outline: 2px solid rgba(99, 102, 241, 0.7);
+}
+
+.plan-card header h2 {
+  margin: 0;
+  color: #312e81;
+}
+
+.plan-card header p {
+  margin: 0.35rem 0 0;
+  color: #475569;
+  line-height: 1.5;
+}
+
+.plan-card strong {
+  font-size: 2rem;
+  color: #4338ca;
+}
+
+.plan-card ul {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.4rem;
+  color: #1f2937;
+}
+
+.plan-card button {
+  margin-top: auto;
+  padding: 0.8rem 1rem;
+  border-radius: 12px;
+  border: none;
+  background: rgba(99, 102, 241, 0.15);
+  color: #4338ca;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.subscribe__cta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  align-items: center;
+}
+
+.subscribe__generate {
+  padding: 0.9rem 2rem;
+  border-radius: 999px;
+  border: none;
+  background: linear-gradient(135deg, #4338ca, #6366f1);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.subscribe__generate:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.subscribe__error {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.subscribe__hint {
+  color: #0ea5e9;
+  font-weight: 500;
+}
+
+.subscribe__status {
+  background: #fff;
+  border-radius: 18px;
+  padding: 2rem;
+  box-shadow: 0 22px 48px -40px rgba(15, 23, 42, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  color: #1f2937;
+}
+
+.subscribe__status h2 {
+  margin: 0;
+  color: #312e81;
+}
+
+.subscribe__status--success {
+  color: #047857;
+  font-weight: 600;
+}
+
+.subscribe__status--warning {
+  color: #b45309;
+  font-weight: 600;
+}
+
+.subscribe__status--error {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.subscribe__correlation {
+  font-size: 0.9rem;
+  color: #475569;
+  word-break: break-all;
+}
+
+.subscribe__how ol {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.8rem;
+}
