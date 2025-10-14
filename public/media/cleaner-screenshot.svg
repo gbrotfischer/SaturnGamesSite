@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#0b1120" />
+    </linearGradient>
+    <linearGradient id="bar" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#22c55e" />
+      <stop offset="100%" stop-color="#34d399" />
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="720" rx="28" fill="url(#bg)" />
+  <g opacity="0.14" fill="#34d399">
+    <circle cx="320" cy="180" r="140" />
+    <circle cx="1080" cy="140" r="160" />
+    <circle cx="900" cy="520" r="220" />
+  </g>
+  <text x="80" y="160" fill="#34d399" font-family="'Orbitron', sans-serif" font-size="56" font-weight="700">Cleaner Control</text>
+  <text x="80" y="210" fill="#94a3b8" font-family="'Inter', sans-serif" font-size="28">Cada reação da audiência derruba itens. Mantenha o palco limpo!</text>
+  <rect x="80" y="250" width="480" height="220" rx="24" fill="#111827" opacity="0.9" />
+  <text x="120" y="320" fill="#f8fafc" font-family="'Inter', sans-serif" font-size="32" font-weight="700">Itens no chão</text>
+  <text x="120" y="370" fill="#94a3b8" font-family="'Inter', sans-serif" font-size="26">Latas: 6  •  Estrelas: 4  •  Confetes: 12</text>
+  <rect x="80" y="500" width="520" height="24" rx="12" fill="#1f2937" />
+  <rect x="80" y="500" width="210" height="24" rx="12" fill="url(#bar)" />
+  <text x="80" y="560" fill="#bbf7d0" font-family="'Inter', sans-serif" font-size="26">Objetivo: piso limpo por 10 segundos</text>
+  <text x="80" y="610" fill="#34d399" font-family="'Inter', sans-serif" font-size="26" letter-spacing="0.22em">PREPARE-SE</text>
+</svg>
