@@ -1,0 +1,12 @@
+name = "saturn-openpix"
+main = "src/index.ts"
+compatibility_date = "2024-01-29"
+
+[vars]
+# Configure via wrangler or dashboard; keys aqui são placeholders apenas para referência.
+# SUPABASE_URL = "https://xyzcompany.supabase.co"
+# SUPABASE_SERVICE_ROLE_KEY = "service-role-key"
+# SUPABASE_ANON_KEY = "anon-public-key"
+# OPENPIX_WEBHOOK_SECRET = "opcional-token-webhook"
+# OPENPIX_APP_ID = "app-id-usado-no-plugin"
+# CORS_ALLOW_ORIGIN = "https://www.saturngames.win"
