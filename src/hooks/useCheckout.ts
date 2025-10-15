@@ -105,6 +105,17 @@ export function useCheckout() {
       setError(null);
 
       try {
+        const resolvedSuccessUrl =
+          successUrl ??
+          (typeof window !== 'undefined'
+            ? `${window.location.origin}/success`
+            : undefined);
+        const resolvedCancelUrl =
+          cancelUrl ??
+          (typeof window !== 'undefined'
+            ? `${window.location.origin}/jogos/${game.slug}`
+            : undefined);
+
         const session = await createCheckoutSession({
           gameId: game.id,
           priceId,
@@ -112,8 +123,8 @@ export function useCheckout() {
           email: user.email,
           mode,
           accessToken,
-          successUrl,
-          cancelUrl,
+          successUrl: resolvedSuccessUrl,
+          cancelUrl: resolvedCancelUrl,
         });
 
         persistCheckout({

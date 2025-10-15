@@ -294,7 +294,7 @@ export async function createCheckoutSession(args: {
   successUrl?: string;
   cancelUrl?: string;
 }): Promise<StripeCheckoutSession> {
-  const response = await fetch('/api/create-checkout', {
+  const response = await fetch('/api/create-checkout-session', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -341,7 +341,9 @@ export async function createCheckoutSession(args: {
 }
 
 export async function verifyCheckoutSession(sessionId: string) {
-  const response = await fetch(`/api/verify-checkout?session_id=${encodeURIComponent(sessionId)}`);
+  const response = await fetch(
+    `/api/check-payment-status?session_id=${encodeURIComponent(sessionId)}`,
+  );
 
   let payload: any = null;
   try {
@@ -355,12 +357,21 @@ export async function verifyCheckoutSession(sessionId: string) {
     throw new Error(message);
   }
 
+  const metadata =
+    payload?.metadata ??
+    payload?.session?.metadata ??
+    (payload?.data && payload.data.metadata) ??
+    null;
+
+  const metadataGameId =
+    metadata?.gameId ?? metadata?.game_id ?? metadata?.gameID ?? metadata?.['game-id'] ?? null;
+
   return {
     success: Boolean(payload?.success ?? payload?.ok ?? false),
     paymentStatus: payload?.paymentStatus ?? payload?.payment_status ?? 'pending',
     accessActive: Boolean(payload?.accessActive ?? payload?.access_active ?? false),
     expiresAt: payload?.expiresAt ?? payload?.expires_at ?? null,
-    gameId: payload?.gameId ?? payload?.game_id ?? null,
+    gameId: payload?.gameId ?? payload?.game_id ?? metadataGameId ?? null,
   };
 }
 

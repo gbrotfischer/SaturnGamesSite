@@ -13,7 +13,7 @@ Portal gamer dark focado em aluguel individual de mods e jogos criados para live
 - React 18 + React Router
 - TypeScript, CSS moderno (tema dark gamer)
 - Supabase (`@supabase/supabase-js`)
-- Stripe Checkout (integração via endpoints `/api/create-checkout` e `/api/verify-checkout`)
+- Stripe Checkout (integração via endpoints `/api/create-checkout-session` e `/api/check-payment-status`)
 - Cloudflare Pages (deploy estático do front)
 
 ## Catálogo base (demo)
@@ -80,11 +80,11 @@ O bundle final ficará em `dist/`.
 
 O front-end consome três endpoints HTTP expostos pelo backend (Cloudflare Worker, Supabase Edge Function ou outra plataforma de sua escolha):
 
-1. **`POST /api/create-checkout`**
+1. **`POST /api/create-checkout-session`**
    - Request: `{ gameId, priceId, userId, email, mode }`.
    - Resposta esperada: `{ sessionId, url, expiresAt? }` com a URL pública do Stripe Checkout.
    - O backend deve criar/atualizar `checkout_sessions` e armazenar o `session_id` para reconciliar o webhook do Stripe.
-2. **`GET /api/verify-checkout?session_id=...`**
+2. **`GET /api/check-payment-status?session_id=...`**
    - Verifica o status da sessão no Stripe e retorna `{ success, paymentStatus, accessActive?, expiresAt?, gameId? }`.
    - Usado na página de sucesso para exibir a confirmação ao usuário.
 3. **`GET /api/user/games`** *(opcional)*
@@ -95,10 +95,10 @@ Implemente os webhooks do Stripe (`checkout.session.completed`, `invoice.payment
 
 ## Fluxo de pagamentos
 
-1. O usuário clica em “Comprar acesso” ou “Renovar”. O front chama `POST /api/create-checkout` enviando `{ gameId, priceId, userId, email, mode }`.
+1. O usuário clica em “Comprar acesso” ou “Renovar”. O front chama `POST /api/create-checkout-session` enviando `{ gameId, priceId, userId, email, mode }`.
 2. O backend cria/atualiza `checkout_sessions`, gera a sessão no Stripe e devolve `{ sessionId, url }`.
 3. O front salva `sessionId` em `sessionStorage` (`checkout_pending`) e redireciona para a URL do Stripe.
-4. Após o pagamento, o Stripe redireciona para `/checkout/sucesso?session_id=...`. A página consulta `GET /api/verify-checkout` e exibe o status.
+4. Após o pagamento, o Stripe redireciona para `/success?session_id=...`. A página consulta `GET /api/check-payment-status` e exibe o status.
 5. O webhook do Stripe cria/estende o aluguel na tabela `rentals`. A tela Minha Conta / Biblioteca mostra o jogo assim que o registro está ativo.
 
 ## Estrutura de diretórios
@@ -123,7 +123,7 @@ Implemente os webhooks do Stripe (`checkout.session.completed`, `invoice.payment
 
 - [ ] Variáveis de ambiente configuradas no Pages e no backend responsável pelo Stripe.
 - [ ] Tabelas do Supabase criadas via `db/schema.sql` e policies ajustadas.
-- [ ] Endpoints `/api/create-checkout` e `/api/verify-checkout` publicados e conectados ao Stripe.
+- [ ] Endpoints `/api/create-checkout-session` e `/api/check-payment-status` publicados e conectados ao Stripe.
 - [ ] Fluxo completo validado: login → selecionar jogo → redirecionar ao Stripe → pagamento confirmado → aluguel ativo no Supabase.
 - [ ] SAC enviando ticket e recebendo resposta `ticketId`.
 - [ ] Biblioteca/Minha Conta refletindo aluguéis ativos e preferências.

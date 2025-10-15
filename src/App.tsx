@@ -59,6 +59,7 @@ const AppRoutes = () => (
     />
     <Route path="/assine" element={<SubscribePage />} />
     <Route path="/checkout/sucesso" element={<CheckoutSuccessPage />} />
+    <Route path="/success" element={<CheckoutSuccessPage />} />
     <Route path="/faq" element={<FaqPage />} />
     <Route path="/contato" element={<ContactPage />} />
     <Route path="/sac" element={<ContactPage />} />

@@ -40,9 +40,9 @@ const CheckoutSuccessPage = () => {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const sessionId = params.get('session_id');
+    const rawSessionId = params.get('session_id');
 
-    if (!sessionId) {
+    if (!rawSessionId) {
       setState({
         status: 'error',
         message: 'Sessão inválida. Não encontramos dados de pagamento.',
@@ -52,6 +52,8 @@ const CheckoutSuccessPage = () => {
       });
       return;
     }
+
+    const sessionId = rawSessionId;
 
     setState((current) => ({
       ...current,
@@ -121,9 +123,12 @@ const CheckoutSuccessPage = () => {
   const expiresText = state.expiresAt ? formatShortDate(state.expiresAt) : null;
 
   return (
-    <div className="checkout-success">
-      <div className="checkout-success__card">
-        <div className={`checkout-success__icon checkout-success__icon--${state.status}`}>
+    <div className="checkout-success success-container">
+      <div className="checkout-success__card success-card">
+        <div
+          className={`checkout-success__icon success-icon checkout-success__icon--${state.status}`}
+          aria-live="polite"
+        >
           {state.status === 'success' ? '✓' : state.status === 'error' ? '!' : '⌛'}
         </div>
         <h1>
@@ -133,29 +138,43 @@ const CheckoutSuccessPage = () => {
             ? 'Não foi possível confirmar'
             : 'Estamos finalizando seu pagamento'}
         </h1>
-        <p className="checkout-success__message">{state.message}</p>
+        <p className="checkout-success__message" id="status-message">
+          {state.message}
+        </p>
+
+        <p className="checkout-success__message is-muted" id="payment-status">
+          Status Stripe: {state.paymentStatus || 'pendente'}
+        </p>
 
         {(gameName || expiresText) && (
           <div className="checkout-success__details" id="game-details">
             <h3>Detalhes do acesso</h3>
             {gameName && (
               <p>
-                Jogo: <span>{gameName}</span>
+                Jogo: <span id="game-name">{gameName}</span>
               </p>
             )}
             {expiresText && (
               <p>
-                Válido até: <span>{expiresText}</span>
+                Válido até: <span id="expiration-date">{expiresText}</span>
               </p>
             )}
           </div>
         )}
 
-        <div className="checkout-success__actions">
-          <button type="button" className="primary" onClick={() => navigate('/minha-conta')}>
+        <div className="checkout-success__actions action-buttons">
+          <button
+            type="button"
+            className="primary primary-button"
+            onClick={() => navigate('/minha-conta')}
+          >
             Ir para o Dashboard
           </button>
-          <button type="button" className="secondary" onClick={() => navigate('/jogos')}>
+          <button
+            type="button"
+            className="secondary secondary-button"
+            onClick={() => navigate('/jogos')}
+          >
             Ver todos os jogos
           </button>
         </div>
