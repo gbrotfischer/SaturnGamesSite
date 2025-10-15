@@ -1,0 +1,128 @@
+.auth {
+  display: flex;
+  justify-content: center;
+  padding: 4rem 1.5rem;
+}
+
+.auth__card {
+  width: min(420px, 100%);
+  background: rgba(21, 28, 51, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--sg-radius-lg);
+  box-shadow: var(--sg-shadow-soft);
+  padding: 2.5rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.auth__banner {
+  padding: 0.75rem 1rem;
+  border-radius: var(--sg-radius-sm);
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(250, 204, 21, 0.35);
+  color: #facc15;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.auth__tabs {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  background: rgba(79, 70, 229, 0.2);
+  padding: 0.25rem;
+  border-radius: var(--sg-radius-sm);
+}
+
+.auth__tabs button {
+  border: none;
+  background: transparent;
+  padding: 0.75rem;
+  border-radius: var(--sg-radius-sm);
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--sg-text-muted);
+}
+
+.auth__tabs button.active {
+  background: rgba(79, 70, 229, 0.45);
+  color: var(--sg-text-strong);
+}
+
+.auth__form {
+  display: grid;
+  gap: 1rem;
+}
+
+.auth__form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  font-size: 0.9rem;
+  color: var(--sg-text-muted);
+}
+
+.auth__form input {
+  border-radius: var(--sg-radius-sm);
+  border: 1px solid rgba(148, 163, 255, 0.35);
+  padding: 0.8rem 1rem;
+  font-size: 1rem;
+  background: rgba(15, 20, 36, 0.85);
+  color: var(--sg-text-strong);
+}
+
+.auth__form small {
+  color: #fca5a5;
+}
+
+.auth__submit {
+  margin-top: 0.5rem;
+  padding: 0.85rem;
+  border-radius: var(--sg-radius-sm);
+  border: none;
+  background: linear-gradient(135deg, #4338ca, #6366f1);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth__submit:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.auth__divider {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--sg-text-muted);
+}
+
+.auth__divider::before,
+.auth__divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(148, 163, 255, 0.25);
+}
+
+.auth__google {
+  padding: 0.85rem;
+  border-radius: var(--sg-radius-sm);
+  border: 1px solid rgba(148, 163, 255, 0.35);
+  background: transparent;
+  color: var(--sg-text-strong);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.auth__google:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.auth__message {
+  text-align: center;
+  color: var(--sg-text-muted);
+  font-weight: 500;
+}

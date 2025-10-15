@@ -1,0 +1,154 @@
+.account {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+}
+
+.account__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.account__header h1 {
+  margin: 0 0 0.4rem;
+  font-size: 2.2rem;
+}
+
+.account__header p {
+  margin: 0;
+  color: var(--sg-text-muted);
+}
+
+.account__signout {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--sg-text-strong);
+  padding: 0.65rem 1.1rem;
+  border-radius: var(--sg-radius-sm);
+  font-weight: 600;
+}
+
+.account__message {
+  background: rgba(79, 70, 229, 0.2);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  padding: 0.9rem 1.1rem;
+  border-radius: var(--sg-radius-md);
+}
+
+.account__card {
+  background: rgba(21, 28, 51, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--sg-radius-lg);
+  padding: 1.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.account__profile {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.2rem;
+}
+
+.account__profile dt {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--sg-text-muted);
+}
+
+.account__profile dd {
+  margin: 0.3rem 0 0;
+}
+
+.account__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.account__list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.account__list li button {
+  background: var(--sg-primary);
+  border: none;
+  color: #fff;
+  padding: 0.6rem 1.1rem;
+  border-radius: var(--sg-radius-sm);
+  font-weight: 600;
+}
+
+.account__list li span {
+  display: block;
+  color: var(--sg-text-muted);
+  font-size: 0.85rem;
+}
+
+.account__list.is-compact li {
+  justify-content: flex-start;
+}
+
+.account__accordion summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.account__library {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.2rem;
+}
+
+.account__library article {
+  background: rgba(15, 20, 36, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--sg-radius-md);
+  padding: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.account__library article a {
+  color: var(--sg-primary-strong);
+  font-weight: 600;
+}
+
+.account__preferences {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.account__preferences label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+@media (max-width: 720px) {
+  .account {
+    padding: 2rem 1rem 3rem;
+  }
+
+  .account__header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .account__signout {
+    align-self: stretch;
+  }
+}

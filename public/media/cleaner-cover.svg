@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 960">
+  <defs>
+    <linearGradient id="cleaner-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#111827" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+    <linearGradient id="glow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#34d399" />
+      <stop offset="100%" stop-color="#10b981" />
+    </linearGradient>
+  </defs>
+  <rect width="720" height="960" fill="url(#cleaner-bg)" />
+  <g opacity="0.12" fill="url(#glow)">
+    <circle cx="200" cy="240" r="160" />
+    <circle cx="520" cy="360" r="200" />
+    <circle cx="340" cy="720" r="220" />
+  </g>
+  <g stroke="#34d399" stroke-width="3" opacity="0.35">
+    <path d="M180 680 H520" />
+    <path d="M210 720 H540" />
+    <path d="M240 760 H540" />
+  </g>
+  <text x="60" y="760" fill="#6ee7b7" font-family="'Orbitron', sans-serif" font-size="60" font-weight="700">Saturn</text>
+  <text x="60" y="840" fill="#f8fafc" font-family="'Orbitron', sans-serif" font-size="88" font-weight="700">Cleaner</text>
+  <text x="60" y="900" fill="#bbf7d0" font-family="'Inter', sans-serif" font-size="28" letter-spacing="0.22em">COMING SOON</text>
+</svg>
