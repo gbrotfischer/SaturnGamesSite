@@ -73,7 +73,17 @@ const GameCard = ({
               {typeof daysRemaining === 'number' && daysRemaining <= 5 && (
                 <span className="sg-game-card__badge is-warning">Expira em {daysRemaining} dias</span>
               )}
-              <button type="button" onClick={onPrimaryAction} className="sg-game-card__primary">
+              <button
+                type="button"
+                onClick={onPrimaryAction}
+                className="sg-game-card__primary checkout-button"
+                data-game-id={game.id}
+                data-price-id={
+                  rental?.mode === 'lifetime'
+                    ? game.stripePriceIdLifetime ?? ''
+                    : game.stripePriceIdRental ?? ''
+                }
+              >
                 Renovar aluguel
               </button>
             </div>
@@ -81,18 +91,22 @@ const GameCard = ({
             <div className="sg-game-card__actions">
               <button
                 type="button"
-                className="sg-game-card__primary"
+                className="sg-game-card__primary checkout-button"
                 onClick={onPrimaryAction}
                 disabled={disabled || game.status === 'coming_soon'}
+                data-game-id={game.id}
+                data-price-id={game.stripePriceIdRental ?? ''}
               >
                 {game.status === 'coming_soon' ? 'Em breve' : primaryLabel}
               </button>
               {showLifetimeOption && game.isLifetimeAvailable && (
                 <button
                   type="button"
-                  className="sg-game-card__secondary"
+                  className="sg-game-card__secondary checkout-button"
                   onClick={onLifetimeAction}
                   disabled={disabled}
+                  data-game-id={game.id}
+                  data-price-id={game.stripePriceIdLifetime ?? ''}
                 >
                   {lifetimeLabel}
                 </button>

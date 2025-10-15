@@ -11,6 +11,8 @@ create table if not exists public.games (
   description text,
   price_cents integer not null,
   lifetime_price_cents integer,
+  stripe_price_id_rental text,
+  stripe_price_id_lifetime text,
   rental_duration_days integer not null default 30,
   is_lifetime_available boolean not null default false,
   is_published boolean not null default true,

@@ -22,6 +22,8 @@ export interface Game {
   description: string | null;
   priceCents: number;
   lifetimePriceCents: number | null;
+  stripePriceIdRental: string | null;
+  stripePriceIdLifetime: string | null;
   rentalDurationDays: number;
   isLifetimeAvailable: boolean;
   isPublished: boolean;

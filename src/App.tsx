@@ -12,6 +12,7 @@ import FaqPage from './pages/FaqPage';
 import AuthPage from './pages/AuthPage';
 import NotFoundPage from './pages/NotFoundPage';
 import SubscribePage from './pages/SubscribePage';
+import CheckoutSuccessPage from './pages/CheckoutSuccessPage';
 
 import './App.css';
 
@@ -57,6 +58,7 @@ const AppRoutes = () => (
       }
     />
     <Route path="/assine" element={<SubscribePage />} />
+    <Route path="/checkout/sucesso" element={<CheckoutSuccessPage />} />
     <Route path="/faq" element={<FaqPage />} />
     <Route path="/contato" element={<ContactPage />} />
     <Route path="/sac" element={<ContactPage />} />

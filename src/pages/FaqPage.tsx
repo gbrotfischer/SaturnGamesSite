@@ -4,7 +4,7 @@ const faqs = [
   {
     question: 'Como funciona o aluguel individual?',
     answer:
-      'Escolha o jogo, confirme o Pix e o acesso é liberado automaticamente pelo nosso Worker em poucos segundos.',
+      'Escolha o jogo, finalize o checkout do Stripe e o acesso é liberado automaticamente pelo nosso backend em poucos segundos.',
   },
   {
     question: 'Posso testar antes de assinar?',
@@ -24,7 +24,7 @@ const faqs = [
   {
     question: 'Quais formas de pagamento estão disponíveis?',
     answer:
-      'Utilizamos Pix via OpenPix para liberação instantânea. Cartão e boleto estão em avaliação para lançamentos futuros.',
+      'Utilizamos Stripe para processar pagamentos com cartão e Pix. Novos métodos serão anunciados conforme as integrações forem liberadas.',
   },
 ];
 

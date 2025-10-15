@@ -10,7 +10,6 @@ import type { Game, RentalWithGame } from '../types';
 import { formatCurrency } from '../utils/formatCurrency';
 import { calculateDaysRemaining, formatDate, formatShortDate, isActiveRental } from '../utils/date';
 import { useCheckout } from '../hooks/useCheckout';
-import CheckoutModal from '../components/CheckoutModal';
 
 import './GamePage.css';
 
@@ -49,19 +48,15 @@ const GamePage = () => {
   useEffect(() => {
     if (checkout.error) {
       setStatusMessage(checkout.error);
-    } else if (checkout.status === 'paid') {
-      setStatusMessage('Pagamento confirmado! Atualizamos seu acesso em instantes.');
-    } else if (checkout.status === 'expired') {
-      setStatusMessage('Cobrança expirada. Gere uma nova cobrança se ainda quiser o jogo.');
+      return;
+    }
+
+    if (checkout.status === 'processing') {
+      setStatusMessage('Preparando checkout seguro do Stripe...');
+    } else if (checkout.status === 'redirecting') {
+      setStatusMessage('Redirecionando para o Stripe. Complete o pagamento para liberar o acesso.');
     }
   }, [checkout.error, checkout.status]);
-
-  useEffect(() => {
-    if (!game || !checkout.rental) return;
-    if (checkout.rental.gameId === game.id) {
-      setRental(checkout.rental);
-    }
-  }, [checkout.rental, game]);
 
   const cover = useMemo(() => game?.assets.find((asset) => asset.kind === 'cover') ?? game?.assets[0], [game]);
   const screenshots = useMemo(
@@ -78,10 +73,17 @@ const GamePage = () => {
         return;
       }
 
+      const priceId = mode === 'lifetime' ? game.stripePriceIdLifetime : game.stripePriceIdRental;
+      if (!priceId) {
+        setStatusMessage('Este jogo ainda não possui configuração de preço no Stripe.');
+        return;
+      }
+
       try {
         await checkout.startCheckout({
           game,
           mode,
+          priceId,
           user: {
             id: user.id,
             email: user.email,
@@ -90,8 +92,9 @@ const GamePage = () => {
                 ? user.user_metadata.full_name
                 : undefined,
           },
+          accessToken: session.access_token,
         });
-        setStatusMessage('Geramos a sessão Pix. Escaneie o QR code e aguarde a confirmação.');
+        setStatusMessage('Abrindo checkout do Stripe. Complete o pagamento para liberar o acesso.');
       } catch (err: any) {
         setStatusMessage(err?.message ?? 'Não foi possível gerar a cobrança.');
       }
@@ -120,24 +123,14 @@ const GamePage = () => {
   }
 
   useEffect(() => {
-    if (!game || autoCheckoutTriggered || !user?.id) return;
+    if (!game || autoCheckoutTriggered) return;
     const params = new URLSearchParams(location.search);
     const shouldCheckout = params.get('checkout') === '1';
     if (shouldCheckout && game.status === 'available') {
       setAutoCheckoutTriggered(true);
       void handleCheckout('rental');
-      return;
     }
-
-    const resume = async () => {
-      const resumedRental = await checkout.resumeCheckout({ game, mode: 'rental', userId: user.id });
-      if (!resumedRental && game.isLifetimeAvailable) {
-        await checkout.resumeCheckout({ game, mode: 'lifetime', userId: user.id });
-      }
-    };
-
-    void resume();
-  }, [autoCheckoutTriggered, checkout, game, handleCheckout, location.search, user?.id]);
+  }, [autoCheckoutTriggered, game, handleCheckout, location.search]);
 
   if (loading) {
     return <div className="game__loading">Carregando jogo...</div>;
@@ -202,7 +195,7 @@ const GamePage = () => {
           )}
 
           <div className="game__security">
-            <span>🔐 Pagamento seguro via OpenPix</span>
+            <span>🔐 Pagamento seguro via Stripe</span>
             <span>🛡️ Proteção Cloudflare</span>
             <span>🔄 Renovação automática via webhook</span>
           </div>
@@ -251,16 +244,6 @@ const GamePage = () => {
           ))}
         </section>
       )}
-      <CheckoutModal
-        open={checkout.isOpen}
-        onClose={checkout.closeCheckout}
-        onRefresh={checkout.refreshCheckout}
-        status={checkout.status}
-        session={checkout.session}
-        game={checkout.activeGame}
-        rental={checkout.rental}
-        error={checkout.error}
-      />
     </div>
   );
 };

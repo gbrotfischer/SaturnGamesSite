@@ -46,7 +46,7 @@ const ContactPage = () => {
           <span className="contact__badge">Suporte oficial</span>
           <h1>Fale com a equipe Saturn</h1>
           <p>
-            Precisa de ajuda com acesso, cobrança Pix ou integração no TikTok? Nossa equipe gamer responde rápido e mantém o
+          Precisa de ajuda com acesso, cobrança Stripe ou integração no TikTok? Nossa equipe gamer responde rápido e mantém o
             histórico dos seus tickets.
           </p>
           <ul className="contact__highlights">

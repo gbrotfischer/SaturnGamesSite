@@ -1,343 +1,151 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  createCheckoutSession,
-  fetchActiveRentals,
-  fetchCheckoutSession,
-  fetchCheckoutPaymentArtifacts,
-} from '../lib/api';
-import type { CheckoutMode, Game, RentalWithGame } from '../types';
-
-export type CheckoutStatus = 'idle' | 'creating' | 'pending' | 'paid' | 'expired' | 'error';
-
-export type CheckoutSessionData = {
-  sessionId: string;
-  correlationId: string;
-  status: 'pending' | 'paid' | 'expired' | 'cancelled';
-  expiresAt: string | null;
-  amountCents: number;
-  mode: CheckoutMode;
-  gameId: string;
-  rentalDurationDays: number | null;
-  qrCodeImage?: string | null;
-  paymentLinkUrl?: string | null;
-  paymentRef?: string | null;
-};
+import { useCallback, useMemo, useState } from 'react';
+import type { CheckoutMode, Game } from '../types';
+import { createCheckoutSession } from '../lib/api';
 
 type StartCheckoutArgs = {
   game: Game;
   mode: CheckoutMode;
+  priceId: string;
   user: { id: string; email: string; fullName?: string | null };
+  accessToken?: string;
+  successUrl?: string;
+  cancelUrl?: string;
 };
 
-type ResumeCheckoutArgs = {
-  game: Game;
+export type CheckoutStatus = 'idle' | 'processing' | 'redirecting' | 'error';
+
+export type StoredCheckout = {
+  sessionId: string;
+  gameId: string;
+  priceId: string;
   mode: CheckoutMode;
-  userId: string;
+  timestamp: number;
+  createdAt?: number;
 };
 
-const STORAGE_PREFIX = 'sgs_checkout';
+const STORAGE_KEY = 'checkout_pending';
+const LEGACY_STORAGE_KEY = 'sgs_stripe_checkout';
 
-const storageKey = (gameId: string, mode: CheckoutMode) => `${STORAGE_PREFIX}:${gameId}:${mode}`;
-
-const persistSession = (session: CheckoutSessionData) => {
+function persistCheckout(value: Omit<StoredCheckout, 'timestamp' | 'createdAt'>) {
   if (typeof window === 'undefined') return;
   try {
-    const payload = {
-      ...session,
-      storedAt: Date.now(),
+    const payload: StoredCheckout = {
+      ...value,
+      timestamp: Date.now(),
     };
-    window.sessionStorage.setItem(storageKey(session.gameId, session.mode), JSON.stringify(payload));
+    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    window.sessionStorage.removeItem(LEGACY_STORAGE_KEY);
   } catch (error) {
-    console.warn('Não foi possível persistir a sessão de checkout.', error);
+    console.warn('Não foi possível persistir o checkout localmente.', error);
   }
-};
+}
 
-const readStoredSession = (gameId: string, mode: CheckoutMode): CheckoutSessionData | null => {
+export function readStoredCheckout(): StoredCheckout | null {
   if (typeof window === 'undefined') return null;
-  try {
-    const raw = window.sessionStorage.getItem(storageKey(gameId, mode));
+  const parse = (raw: string | null) => {
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as CheckoutSessionData & { storedAt?: number };
-    if (parsed.expiresAt) {
-      const expiresAt = new Date(parsed.expiresAt);
-      if (Number.isFinite(expiresAt.getTime()) && expiresAt.getTime() < Date.now()) {
-        window.sessionStorage.removeItem(storageKey(gameId, mode));
+    try {
+      const parsed = JSON.parse(raw) as Partial<StoredCheckout>;
+      if (!parsed?.sessionId || !parsed?.gameId) {
         return null;
       }
+      return {
+        sessionId: parsed.sessionId,
+        gameId: parsed.gameId,
+        priceId: parsed.priceId ?? '',
+        mode: (parsed.mode ?? 'rental') as CheckoutMode,
+        timestamp: parsed.timestamp ?? parsed.createdAt ?? Date.now(),
+        createdAt: parsed.createdAt,
+      } satisfies StoredCheckout;
+    } catch (error) {
+      console.warn('Não foi possível ler o checkout pendente.', error);
+      return null;
     }
-    return parsed;
-  } catch (error) {
-    console.warn('Não foi possível ler a sessão de checkout armazenada.', error);
-    return null;
-  }
-};
+  };
 
-const clearStoredSession = (gameId: string, mode: CheckoutMode) => {
+  const current = parse(window.sessionStorage.getItem(STORAGE_KEY));
+  if (current) return current;
+  const legacy = parse(window.sessionStorage.getItem(LEGACY_STORAGE_KEY));
+  if (legacy) {
+    try {
+      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(legacy));
+      window.sessionStorage.removeItem(LEGACY_STORAGE_KEY);
+    } catch (error) {
+      console.warn('Não foi possível migrar o checkout pendente legado.', error);
+    }
+    return legacy;
+  }
+
+  return null;
+}
+
+export function clearStoredCheckout() {
   if (typeof window === 'undefined') return;
   try {
-    window.sessionStorage.removeItem(storageKey(gameId, mode));
+    window.sessionStorage.removeItem(STORAGE_KEY);
+    window.sessionStorage.removeItem(LEGACY_STORAGE_KEY);
   } catch (error) {
-    console.warn('Não foi possível remover a sessão de checkout armazenada.', error);
+    console.warn('Não foi possível remover o checkout pendente.', error);
   }
-};
+}
 
 export function useCheckout() {
   const [status, setStatus] = useState<CheckoutStatus>('idle');
-  const [sessionData, setSessionData] = useState<CheckoutSessionData | null>(null);
-  const [activeGame, setActiveGame] = useState<Game | null>(null);
-  const [activeMode, setActiveMode] = useState<CheckoutMode>('rental');
   const [error, setError] = useState<string | null>(null);
-  const [rental, setRental] = useState<RentalWithGame | null>(null);
-  const [isOpen, setIsOpen] = useState(false);
 
-  const contextRef = useRef<{ gameId: string; mode: CheckoutMode; userId: string } | null>(null);
-  const pollTimerRef = useRef<number | null>(null);
-  const sessionRef = useRef<CheckoutSessionData | null>(null);
-  const artifactAttemptsRef = useRef<Set<string>>(new Set());
+  const pendingCheckout = useMemo(() => readStoredCheckout(), [status]);
 
-  useEffect(() => {
-    sessionRef.current = sessionData;
-  }, [sessionData]);
-
-  const clearPolling = useCallback(() => {
-    if (pollTimerRef.current !== null) {
-      window.clearInterval(pollTimerRef.current);
-      pollTimerRef.current = null;
-    }
-  }, []);
-
-  const ensurePaymentArtifacts = useCallback(
-    async (snapshot?: CheckoutSessionData | null) => {
-      const target = snapshot ?? sessionRef.current;
-      if (!target || !target.correlationId || target.qrCodeImage) {
-        return;
+  const startCheckout = useCallback(
+    async ({ game, mode, priceId, user, accessToken, successUrl, cancelUrl }: StartCheckoutArgs) => {
+      if (!priceId) {
+        throw new Error('Preço do Stripe não configurado para este jogo.');
       }
 
-      const attemptKey = `${target.sessionId}:${target.correlationId}`;
-      if (artifactAttemptsRef.current.has(attemptKey)) {
-        return;
-      }
-
-      artifactAttemptsRef.current.add(attemptKey);
+      setStatus('processing');
+      setError(null);
 
       try {
-        const details = await fetchCheckoutPaymentArtifacts(target.correlationId);
-        if (!details) {
-          artifactAttemptsRef.current.delete(attemptKey);
-          return;
-        }
-
-        let updated: CheckoutSessionData | null = null;
-        setSessionData((previous) => {
-          if (!previous || previous.sessionId !== target.sessionId) {
-            return previous;
-          }
-
-          const next: CheckoutSessionData = {
-            ...previous,
-            qrCodeImage: details.qrCodeImage ?? previous.qrCodeImage ?? null,
-            paymentLinkUrl: details.paymentLinkUrl ?? previous.paymentLinkUrl ?? null,
-          };
-
-          updated = next;
-          return next;
+        const session = await createCheckoutSession({
+          gameId: game.id,
+          priceId,
+          userId: user.id,
+          email: user.email,
+          mode,
+          accessToken,
+          successUrl,
+          cancelUrl,
         });
 
-        if (updated) {
-          sessionRef.current = updated;
-          persistSession(updated);
-        }
-      } catch (fetchError) {
-        console.warn('Não foi possível obter detalhes do Pix na OpenPix.', fetchError);
-        artifactAttemptsRef.current.delete(attemptKey);
+        persistCheckout({
+          sessionId: session.sessionId,
+          gameId: game.id,
+          priceId,
+          mode,
+        });
+
+        setStatus('redirecting');
+        window.location.href = session.url;
+      } catch (err: any) {
+        const message = err?.message ?? 'Não foi possível iniciar o checkout.';
+        setError(message);
+        setStatus('error');
+        throw err;
       }
     },
     [],
   );
 
-  const refreshSession = useCallback(async () => {
-    const context = contextRef.current;
-    const currentSession = sessionRef.current;
-    if (!context || !currentSession) {
-      return;
-    }
-
-    try {
-      const latest = await fetchCheckoutSession(currentSession.sessionId);
-      if (!latest) {
-        throw new Error('Sessão não encontrada.');
-      }
-
-      const nextSession: CheckoutSessionData = {
-        ...currentSession,
-        status: latest.status,
-        expiresAt: latest.expiresAt ?? currentSession.expiresAt,
-        paymentRef: latest.paymentRef ?? currentSession.paymentRef ?? null,
-        qrCodeImage: latest.qrCodeImage ?? currentSession.qrCodeImage ?? null,
-        paymentLinkUrl: latest.paymentLinkUrl ?? currentSession.paymentLinkUrl ?? null,
-      };
-
-      setSessionData(nextSession);
-      sessionRef.current = nextSession;
-      persistSession(nextSession);
-
-      const attemptKey = `${nextSession.sessionId}:${nextSession.correlationId}`;
-      artifactAttemptsRef.current.delete(attemptKey);
-      if (!nextSession.qrCodeImage) {
-        void ensurePaymentArtifacts(nextSession);
-      }
-
-      if (latest.status === 'paid') {
-        const rentals = await fetchActiveRentals(context.userId);
-        const rentalMatch = rentals.find((entry) => entry.gameId === context.gameId) ?? null;
-        if (rentalMatch) {
-          setRental(rentalMatch);
-        }
-        setStatus('paid');
-        clearPolling();
-        clearStoredSession(context.gameId, context.mode);
-      } else if (latest.status === 'expired' || latest.status === 'cancelled') {
-        setStatus('expired');
-        clearPolling();
-        clearStoredSession(context.gameId, context.mode);
-      } else {
-        setStatus('pending');
-        artifactAttemptsRef.current.delete(attemptKey);
-      }
-    } catch (requestError: any) {
-      const message = requestError?.message ?? 'Erro ao atualizar status da cobrança.';
-      setError(message);
-    }
-  }, [clearPolling, ensurePaymentArtifacts]);
-
-  const startPolling = useCallback(() => {
-    clearPolling();
-    pollTimerRef.current = window.setInterval(() => {
-      void refreshSession();
-    }, 4000);
-  }, [clearPolling, refreshSession]);
-
-  useEffect(() => {
-    return () => {
-      clearPolling();
-    };
-  }, [clearPolling]);
-
-  const startCheckout = useCallback(
-    async ({ game, mode, user }: StartCheckoutArgs) => {
-      setActiveGame(game);
-      setActiveMode(mode);
-      setIsOpen(true);
-      setStatus('creating');
-      setError(null);
-      setRental(null);
-
-      try {
-        const session = await createCheckoutSession({
-          gameId: game.id,
-          mode,
-          userId: user.id,
-          email: user.email,
-          amountCents:
-            mode === 'lifetime'
-              ? game.lifetimePriceCents ?? game.priceCents
-              : game.priceCents,
-          rentalDurationDays: mode === 'rental' ? game.rentalDurationDays : undefined,
-        });
-
-        const normalized: CheckoutSessionData = {
-          sessionId: session.sessionId,
-          correlationId: session.correlationId,
-          status: session.status,
-          expiresAt: session.expiresAt ?? null,
-          amountCents: session.amountCents,
-          mode: session.mode ?? mode,
-          gameId: session.gameId ?? game.id,
-          rentalDurationDays: session.rentalDurationDays ?? (mode === 'rental' ? game.rentalDurationDays : null),
-          qrCodeImage: session.qrCodeImage ?? null,
-          paymentLinkUrl: session.paymentLinkUrl ?? null,
-          paymentRef: session.paymentRef ?? null,
-        };
-
-        setSessionData(normalized);
-        sessionRef.current = normalized;
-        setStatus('pending');
-        contextRef.current = { gameId: game.id, mode, userId: user.id };
-        persistSession(normalized);
-        startPolling();
-        void ensurePaymentArtifacts(normalized);
-      } catch (requestError: any) {
-        const message = requestError?.message ?? 'Não foi possível iniciar o checkout.';
-        setError(message);
-        setStatus('error');
-        throw requestError;
-      }
-    },
-    [ensurePaymentArtifacts, startPolling],
-  );
-
-  const resumeCheckout = useCallback(
-    async ({ game, mode, userId }: ResumeCheckoutArgs) => {
-      const stored = readStoredSession(game.id, mode);
-      if (!stored) {
-        return false;
-      }
-
-      setActiveGame(game);
-      setActiveMode(mode);
-      setIsOpen(true);
-      setError(null);
-      setRental(null);
-      setSessionData(stored);
-      sessionRef.current = stored;
-      setStatus('pending');
-      contextRef.current = { gameId: game.id, mode, userId };
-      persistSession(stored);
-      startPolling();
-      void refreshSession();
-      if (!stored.qrCodeImage) {
-        void ensurePaymentArtifacts(stored);
-      }
-      return true;
-    },
-    [ensurePaymentArtifacts, refreshSession, startPolling],
-  );
-
-  const closeCheckout = useCallback(() => {
-    const context = contextRef.current;
-    if (context) {
-      clearStoredSession(context.gameId, context.mode);
-    }
-    contextRef.current = null;
-    clearPolling();
-    setIsOpen(false);
-    setStatus('idle');
-    setSessionData(null);
-    sessionRef.current = null;
-    setActiveGame(null);
-    setRental(null);
+  const resetError = useCallback(() => {
     setError(null);
-  }, [clearPolling]);
-
-  const manualRefresh = useCallback(async () => {
-    await refreshSession();
-  }, [refreshSession]);
-
-  const isProcessing = useMemo(() => status === 'creating' || status === 'pending', [status]);
+    setStatus('idle');
+  }, []);
 
   return {
-    isOpen,
     status,
     error,
-    session: sessionData,
-    activeGame,
-    activeMode,
-    rental,
-    isProcessing,
+    pendingCheckout,
     startCheckout,
-    resumeCheckout,
-    closeCheckout,
-    refreshCheckout: manualRefresh,
-  };
+    resetError,
+    clearStoredCheckout,
+  } as const;
 }
-

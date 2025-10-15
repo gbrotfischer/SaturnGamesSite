@@ -67,7 +67,7 @@ const Footer = () => {
       <div className="sg-footer__bottom">
         <p>© {currentYear} Saturn Games. Todos os direitos reservados.</p>
         <p className="sg-footer__compliance">
-          Operamos com Supabase, Cloudflare e OpenPix para autenticação, hospedagem e pagamentos.
+          Operamos com Supabase, Cloudflare e Stripe para autenticação, hospedagem e pagamentos.
         </p>
       </div>
     </footer>

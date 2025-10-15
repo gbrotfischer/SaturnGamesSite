@@ -11,7 +11,6 @@ import {
 import type { Game, NotificationPreferences, PurchaseWithGame, RentalWithGame } from '../types';
 import { formatShortDate, isActiveRental } from '../utils/date';
 import { useCheckout } from '../hooks/useCheckout';
-import CheckoutModal from '../components/CheckoutModal';
 
 import './AccountPage.css';
 
@@ -48,47 +47,35 @@ const AccountDashboard = () => {
   }, [loadCollections]);
 
   useEffect(() => {
-    if (!user?.id || games.length === 0) return;
-
-    const resume = async () => {
-      for (const game of games) {
-        const resumed = await checkout.resumeCheckout({ game, mode: 'rental', userId: user.id });
-        if (resumed) {
-          return;
-        }
-        if (game.isLifetimeAvailable) {
-          const lifetime = await checkout.resumeCheckout({
-            game,
-            mode: 'lifetime',
-            userId: user.id,
-          });
-          if (lifetime) {
-            return;
-          }
-        }
-      }
-    };
-
-    void resume();
-  }, [checkout, games, user?.id]);
-
-  useEffect(() => {
     if (checkout.error) {
       setMessage(checkout.error);
-    } else if (checkout.status === 'paid') {
-      setMessage('Pagamento confirmado! Atualizaremos sua biblioteca em instantes.');
-      loadCollections();
-    } else if (checkout.status === 'expired') {
-      setMessage('Cobrança expirada. Gere uma nova tentativa quando desejar.');
+      return;
     }
-  }, [checkout.error, checkout.status, loadCollections]);
+
+    if (checkout.status === 'processing') {
+      setMessage('Preparando checkout seguro do Stripe...');
+    } else if (checkout.status === 'redirecting') {
+      setMessage('Redirecionando para o Stripe. Você voltará automaticamente após o pagamento.');
+    }
+  }, [checkout.error, checkout.status]);
 
   async function handleRenewal(rental: RentalWithGame) {
     if (!rental.game || !user?.id || !user?.email) return;
+    const priceId =
+      rental.mode === 'lifetime'
+        ? rental.game.stripePriceIdLifetime
+        : rental.game.stripePriceIdRental;
+
+    if (!priceId) {
+      setMessage('Plano de pagamento não configurado. Fale com o suporte.');
+      return;
+    }
+
     try {
       await checkout.startCheckout({
         game: rental.game,
         mode: rental.mode,
+        priceId,
         user: {
           id: user.id,
           email: user.email,
@@ -97,8 +84,9 @@ const AccountDashboard = () => {
               ? user.user_metadata.full_name
               : undefined,
         },
+        accessToken: session?.access_token,
       });
-      setMessage('Geramos a sessão Pix para renovar o aluguel.');
+      setMessage('Abrindo checkout do Stripe para concluir a renovação.');
     } catch (err: any) {
       setMessage(err?.message ?? 'Falha ao iniciar renovação.');
     }
@@ -173,7 +161,17 @@ const AccountDashboard = () => {
                   <strong>{rental.game?.title ?? 'Jogo removido'}</strong>
                   <span>Expira em {formatShortDate(rental.expiresAt)}</span>
                 </div>
-                <button type="button" onClick={() => handleRenewal(rental)}>
+                <button
+                  type="button"
+                  className="checkout-button"
+                  onClick={() => handleRenewal(rental)}
+                  data-game-id={rental.game?.id ?? ''}
+                  data-price-id={
+                    rental.mode === 'lifetime'
+                      ? rental.game?.stripePriceIdLifetime ?? ''
+                      : rental.game?.stripePriceIdRental ?? ''
+                  }
+                >
                   Renovar
                 </button>
               </li>
@@ -261,16 +259,6 @@ const AccountDashboard = () => {
         )}
       </section>
 
-      <CheckoutModal
-        open={checkout.isOpen}
-        onClose={checkout.closeCheckout}
-        onRefresh={checkout.refreshCheckout}
-        status={checkout.status}
-        session={checkout.session}
-        game={checkout.activeGame}
-        rental={checkout.rental}
-        error={checkout.error}
-      />
     </div>
   );
 };

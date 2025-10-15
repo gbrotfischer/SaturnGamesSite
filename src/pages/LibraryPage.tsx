@@ -5,7 +5,6 @@ import { useAuth } from '../components/AuthContext';
 import { fetchActiveRentals, fetchCatalog, subscribeToUpcoming } from '../lib/api';
 import type { Game, RentalWithGame } from '../types';
 import { useCheckout } from '../hooks/useCheckout';
-import CheckoutModal from '../components/CheckoutModal';
 
 import './LibraryPage.css';
 
@@ -41,31 +40,6 @@ const LibraryPage = () => {
   }, []);
 
   useEffect(() => {
-    if (!user?.id || games.length === 0) return;
-
-    const resume = async () => {
-      for (const game of games) {
-        const resumed = await checkout.resumeCheckout({ game, mode: 'rental', userId: user.id });
-        if (resumed) {
-          return;
-        }
-        if (game.isLifetimeAvailable) {
-          const lifetime = await checkout.resumeCheckout({
-            game,
-            mode: 'lifetime',
-            userId: user.id,
-          });
-          if (lifetime) {
-            return;
-          }
-        }
-      }
-    };
-
-    void resume();
-  }, [checkout, games, user?.id]);
-
-  useEffect(() => {
     if (!user?.id) {
       setRentals([]);
       return;
@@ -74,25 +48,20 @@ const LibraryPage = () => {
     fetchActiveRentals(user.id)
       .then((records) => setRentals(records))
       .catch((err) => console.error('Erro ao carregar aluguéis', err));
-  }, [user?.id, checkout.status]);
+  }, [user?.id]);
 
   useEffect(() => {
     if (checkout.error) {
       setStatusMessage(checkout.error);
-    } else if (checkout.status === 'paid') {
-      setStatusMessage('Pagamento confirmado! Aguarde alguns instantes para o acesso ser liberado.');
-    } else if (checkout.status === 'expired') {
-      setStatusMessage('Cobrança expirada. Gere uma nova cobrança para tentar novamente.');
+      return;
+    }
+
+    if (checkout.status === 'processing') {
+      setStatusMessage('Preparando checkout seguro do Stripe...');
+    } else if (checkout.status === 'redirecting') {
+      setStatusMessage('Você será redirecionado ao Stripe para concluir o pagamento.');
     }
   }, [checkout.error, checkout.status]);
-
-  useEffect(() => {
-    if (!checkout.rental || !user?.id) return;
-    setRentals((current) => {
-      const existing = current.filter((item) => item.id !== checkout.rental!.id);
-      return [checkout.rental!, ...existing];
-    });
-  }, [checkout.rental, user?.id]);
 
   const genres = useMemo(() => {
     const values = new Set<string>();
@@ -149,10 +118,17 @@ const LibraryPage = () => {
       return;
     }
 
+    const priceId = mode === 'lifetime' ? game.stripePriceIdLifetime : game.stripePriceIdRental;
+    if (!priceId) {
+      setStatusMessage('Plano de pagamento não configurado para este jogo.');
+      return;
+    }
+
     try {
       await checkout.startCheckout({
         game,
         mode,
+        priceId,
         user: {
           id: user.id,
           email: user.email,
@@ -161,8 +137,9 @@ const LibraryPage = () => {
               ? user.user_metadata.full_name
               : undefined,
         },
+        accessToken: session?.access_token,
       });
-      setStatusMessage('Geramos a sessão Pix. Conclua o pagamento no seu banco.');
+      setStatusMessage('Abrindo checkout do Stripe. Conclua o pagamento para liberar o acesso.');
     } catch (err: any) {
       setStatusMessage(err?.message ?? 'Não foi possível iniciar o checkout.');
     }
@@ -267,16 +244,6 @@ const LibraryPage = () => {
         </section>
       )}
 
-      <CheckoutModal
-        open={checkout.isOpen}
-        onClose={checkout.closeCheckout}
-        onRefresh={checkout.refreshCheckout}
-        status={checkout.status}
-        session={checkout.session}
-        game={checkout.activeGame}
-        rental={checkout.rental}
-        error={checkout.error}
-      />
     </div>
   );
 };

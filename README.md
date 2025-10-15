@@ -5,15 +5,15 @@ Portal gamer dark focado em aluguel individual de mods e jogos criados para live
 - Front-end em React + Vite com rotas para Home, Catálogo, Página de Jogo, Minha Conta, FAQ, Contato e Autenticação.
 - Catálogo inicial em `src/data/catalog.json` com jogos disponíveis e "em breve" (pode editar/expandir manualmente).
 - Integração com Supabase (Auth + Database) para catálogo, aluguéis, compras vitalícias e notificações.
-- Cobranças Pix geradas pela Edge Function `openpix-create-session` do Supabase, com QR code exibido no modal nativo do portal.
-- Webhook `openpix-webhook` (Edge Function) atualiza licenças e aluguéis assim que a OpenPix confirma o pagamento.
+- Checkout Stripe pronto para redirecionar o usuário ao pagamento seguro e registrar o aluguel após a confirmação.
+- Página de sucesso dedicada valida o `session_id` retornado pelo Stripe e mostra o status do acesso ao jogo.
 
 ## Stack principal
 
 - React 18 + React Router
 - TypeScript, CSS moderno (tema dark gamer)
 - Supabase (`@supabase/supabase-js`)
-- Supabase Edge Functions (`openpix-create-session`, `openpix-webhook`)
+- Stripe Checkout (integração via endpoints `/api/create-checkout` e `/api/verify-checkout`)
 - Cloudflare Pages (deploy estático do front)
 
 ## Catálogo base (demo)
@@ -35,16 +35,15 @@ Portal gamer dark focado em aluguel individual de mods e jogos criados para live
 | `VITE_SUPABASE_URL` | URL do projeto Supabase |
 | `VITE_SUPABASE_ANON_KEY` | Chave `anon` do Supabase |
 | `VITE_TURNSTILE_SITE_KEY` | (Opcional) site key do Cloudflare Turnstile para o formulário do SAC |
-| `VITE_OPENPIX_APP_ID` | AppID público para recuperar detalhes da cobrança via Edge Function |
+| `VITE_STRIPE_PUBLISHABLE_KEY` | (Opcional) chave pública do Stripe para integrações futuras |
 
 ### Supabase Edge Functions (`supabase secrets set`)
 
 | Nome | Descrição |
 | --- | --- |
 | `SUPABASE_SERVICE_ROLE_KEY` | Necessária para inserir/atualizar `checkout_sessions` e `rentals` |
-| `OPENPIX_APP_ID` | AppID da integração criada na OpenPix |
-| `OPENPIX_API_KEY` | Chave privada da OpenPix para gerar cobranças |
-| `OPENPIX_WEBHOOK_SECRET` | (Opcional) segredo para validar a assinatura do webhook |
+| `STRIPE_SECRET_KEY` | Chave secreta da API do Stripe |
+| `STRIPE_WEBHOOK_SECRET` | Segredo do endpoint de webhook do Stripe |
 
 ## Rodando localmente
 
@@ -77,28 +76,30 @@ O bundle final ficará em `dist/`.
 3. Cadastre as variáveis listadas em [Variáveis de ambiente](#variáveis-de-ambiente).
 4. Após o primeiro deploy, associe `www.saturngames.win` em **Custom domains** e configure redirecionamento do domínio raiz.
 
-## Supabase Edge Functions
+## Endpoints de pagamento
 
-O projeto assume duas funções implantadas no Supabase:
+O front-end consome três endpoints HTTP expostos pelo backend (Cloudflare Worker, Supabase Edge Function ou outra plataforma de sua escolha):
 
-1. **`openpix-create-session`** — recebe `{ user_id, email, game_id, amount, mode, rental_duration_days }` e:
-   - cria um registro em `checkout_sessions` com `session_id = correlation_id`;
-   - chama a API da OpenPix para gerar a cobrança (ou retorna placeholder no sandbox);
-   - devolve `{ ok: true, session, openpix }` onde `openpix.qrCodeImage` e `openpix.paymentLinkUrl` são usados no modal.
-2. **`openpix-webhook`** — processa eventos `OPENPIX:TRANSACTION_RECEIVED`:
-   - armazena o payload em `openpix_webhook_events` (para auditoria);
-   - marca `checkout_sessions.status = 'paid'` e registra `payment_ref`;
-   - cria/estende `rentals` (ou `purchases` para modo vitalício) e dispara broadcasts Realtime opcionais.
+1. **`POST /api/create-checkout`**
+   - Request: `{ gameId, priceId, userId, email, mode }`.
+   - Resposta esperada: `{ sessionId, url, expiresAt? }` com a URL pública do Stripe Checkout.
+   - O backend deve criar/atualizar `checkout_sessions` e armazenar o `session_id` para reconciliar o webhook do Stripe.
+2. **`GET /api/verify-checkout?session_id=...`**
+   - Verifica o status da sessão no Stripe e retorna `{ success, paymentStatus, accessActive?, expiresAt?, gameId? }`.
+   - Usado na página de sucesso para exibir a confirmação ao usuário.
+3. **`GET /api/user/games`** *(opcional)*
+   - Retorna os jogos liberados para o usuário logado (aluguel ativo ou compra vitalícia).
+   - Facilita mostrar a biblioteca resumida no dashboard.
 
-> Consulte a documentação interna do backend para publicar essas funções via `supabase functions deploy`.
+Implemente os webhooks do Stripe (`checkout.session.completed`, `invoice.payment_succeeded`, etc.) para atualizar `checkout_sessions` e criar/estender registros em `rentals` assim que o pagamento for confirmado.
 
 ## Fluxo de pagamentos
 
-1. O front chama `supabase.functions.invoke('openpix-create-session')` passando `game_id`, `mode`, `user_id` e `email`.
-2. A função cria o registro em `checkout_sessions`, gera (ou solicita) o QR code na OpenPix e devolve `session_id`, `correlation_id`, `amount_cents` e opcionalmente `openpix.qrCodeImage`/`paymentLinkUrl`.
-3. O modal `CheckoutModal` exibe o QR/code link e inicia polling em `checkout_sessions?session_id=...` até `status === 'paid'` ou `expires_at` expirar. Quando pago, consulta `rentals` para confirmar a liberação.
-4. A função `openpix-webhook` processa o evento da OpenPix, marca a sessão como paga e cria/estende o aluguel (ou compra vitalícia). Opcionalmente emite broadcast Realtime.
-5. Assim que o front detecta a mudança (via polling ou broadcast), mostra o sucesso e atualiza a biblioteca/minha conta.
+1. O usuário clica em “Comprar acesso” ou “Renovar”. O front chama `POST /api/create-checkout` enviando `{ gameId, priceId, userId, email, mode }`.
+2. O backend cria/atualiza `checkout_sessions`, gera a sessão no Stripe e devolve `{ sessionId, url }`.
+3. O front salva `sessionId` em `sessionStorage` (`checkout_pending`) e redireciona para a URL do Stripe.
+4. Após o pagamento, o Stripe redireciona para `/checkout/sucesso?session_id=...`. A página consulta `GET /api/verify-checkout` e exibe o status.
+5. O webhook do Stripe cria/estende o aluguel na tabela `rentals`. A tela Minha Conta / Biblioteca mostra o jogo assim que o registro está ativo.
 
 ## Estrutura de diretórios
 
@@ -109,22 +110,21 @@ O projeto assume duas funções implantadas no Supabase:
 │   ├── data/catalog.json (catálogo base usado como fallback)
 │   ├── hooks/useCheckout.ts
 │   ├── lib/ (api.ts, env.ts, supabaseClient.ts)
-│   ├── pages/ (HomePage, LibraryPage, GamePage, AccountPage, ContactPage, FaqPage, AuthPage, NotFoundPage)
+│   ├── pages/ (HomePage, LibraryPage, GamePage, AccountPage, CheckoutSuccessPage, ContactPage, FaqPage, AuthPage, NotFoundPage)
 │   ├── styles/global.css
 │   ├── types/ (tipos de domínio)
 │   └── utils/ (formatCurrency, helpers de data)
 ├── db/schema.sql (DDL das tabelas)
 ├── public/ (assets estáticos)
-├── worker/ (legado opcional caso opte por Cloudflare Workers)
 └── README.md
 ```
 
 ## Checklist antes do go-live
 
-- [ ] Variáveis de ambiente configuradas no Pages e nas Edge Functions do Supabase.
+- [ ] Variáveis de ambiente configuradas no Pages e no backend responsável pelo Stripe.
 - [ ] Tabelas do Supabase criadas via `db/schema.sql` e policies ajustadas.
-- [ ] Funções `openpix-create-session` e `openpix-webhook` implantadas e testadas com evento da OpenPix.
-- [ ] Fluxo completo validado: login → selecionar jogo → gerar cobrança → confirmar pagamento → Supabase atualiza aluguel.
+- [ ] Endpoints `/api/create-checkout` e `/api/verify-checkout` publicados e conectados ao Stripe.
+- [ ] Fluxo completo validado: login → selecionar jogo → redirecionar ao Stripe → pagamento confirmado → aluguel ativo no Supabase.
 - [ ] SAC enviando ticket e recebendo resposta `ticketId`.
 - [ ] Biblioteca/Minha Conta refletindo aluguéis ativos e preferências.
 - [ ] Links de políticas e seção de segurança no rodapé revisados.

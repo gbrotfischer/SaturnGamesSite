@@ -111,8 +111,8 @@ const HomePage = () => {
               <span>Lançamentos em breve</span>
             </li>
             <li>
-              <strong>Pix instantâneo</strong>
-              <span>Pagamento seguro com OpenPix</span>
+              <strong>Checkout rápido</strong>
+              <span>Pagamento seguro com Stripe</span>
             </li>
           </ul>
           {feedback && <p className="dashboard__feedback">{feedback}</p>}

@@ -1,5 +1,4 @@
 import { getSupabaseClient, hasSupabaseCredentials } from './supabaseClient';
-import { env } from './env';
 import type {
   CheckoutMode,
   Game,
@@ -19,6 +18,8 @@ const GAME_SELECT = `
   description,
   price_cents,
   lifetime_price_cents,
+  stripe_price_id_rental,
+  stripe_price_id_lifetime,
   rental_duration_days,
   is_lifetime_available,
   is_published,
@@ -42,6 +43,8 @@ type RawGame = {
   description: string | null;
   price_cents: number;
   lifetime_price_cents: number | null;
+  stripe_price_id_rental: string | null;
+  stripe_price_id_lifetime: string | null;
   rental_duration_days: number;
   is_lifetime_available: boolean;
   is_published: boolean;
@@ -86,153 +89,6 @@ type RawNotificationPrefs = {
   email_expiry_alerts: boolean | null;
 };
 
-type RawCheckoutSessionRow = {
-  session_id: string | null;
-  status: string | null;
-  payment_ref: string | null;
-  metadata: Record<string, unknown> | null;
-  expires_at: string | null;
-  game_id: string | null;
-  mode: CheckoutMode | null;
-  amount_cents: number | null;
-  amount: number | null;
-  rental_duration_days: number | null;
-};
-
-type CheckoutSessionPayload = {
-  session_id?: string | null;
-  id?: string | null;
-  status?: CheckoutSessionRecord['status'] | null;
-  metadata?: Record<string, unknown> | null;
-  correlation_id?: string | null;
-  amount_cents?: number | null;
-  amount?: number | null;
-  expires_at?: string | null;
-  expiration?: string | null;
-  game_id?: string | null;
-  mode?: CheckoutMode | null;
-  rental_duration_days?: number | null;
-  payment_ref?: string | null;
-};
-
-function extractCorrelationId(
-  session: CheckoutSessionPayload | RawCheckoutSessionRow | null | undefined,
-  fallback: string,
-) {
-  if (!session) return fallback;
-
-  const metadata =
-    session && 'metadata' in session
-      ? (session.metadata as Record<string, unknown> | null | undefined)
-      : undefined;
-
-  const fromMetadata = (() => {
-    if (!metadata || typeof metadata !== 'object') return null;
-
-    const metaRecord = metadata as Record<string, unknown>;
-
-    if ('correlation_id' in metaRecord && typeof metaRecord.correlation_id === 'string') {
-      return metaRecord.correlation_id;
-    }
-
-    if ('correlationId' in metaRecord && typeof metaRecord.correlationId === 'string') {
-      return metaRecord.correlationId;
-    }
-
-    const dashed = metaRecord['correlation-id'];
-    if (typeof dashed === 'string') {
-      return dashed;
-    }
-
-    return null;
-  })();
-
-  return (
-    fromMetadata ??
-    (('correlation_id' in (session as Record<string, unknown>)
-      ? ((session as Record<string, unknown>).correlation_id as string | null | undefined)
-      : null) ?? null) ??
-    (('correlationId' in (session as Record<string, unknown>)
-      ? ((session as Record<string, unknown>).correlationId as string | null | undefined)
-      : null) ?? null) ??
-    (('session_id' in (session as Record<string, unknown>)
-      ? ((session as Record<string, unknown>).session_id as string | null | undefined)
-      : null) ?? null) ??
-    fallback
-  );
-}
-
-const OPENPIX_NESTED_KEYS = ['openpix', 'charge', 'session', 'data', 'result', 'payload'];
-
-function pickStringFromRecord(
-  record: Record<string, unknown> | null | undefined,
-  ...keys: string[]
-): string | null {
-  if (!record || typeof record !== 'object') {
-    return null;
-  }
-
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === 'string' && value.trim().length > 0) {
-      return value.trim();
-    }
-  }
-
-  return null;
-}
-
-function collectOpenPixCandidates(payload: unknown): Record<string, unknown>[] {
-  const results: Record<string, unknown>[] = [];
-  const queue: unknown[] = [payload];
-  const visited = new Set<unknown>();
-
-  while (queue.length > 0) {
-    const current = queue.shift();
-    if (!current || typeof current !== 'object' || visited.has(current)) {
-      continue;
-    }
-
-    visited.add(current);
-    const record = current as Record<string, unknown>;
-    results.push(record);
-
-    for (const nestedKey of OPENPIX_NESTED_KEYS) {
-      if (nestedKey in record) {
-        queue.push(record[nestedKey]);
-      }
-    }
-  }
-
-  return results;
-}
-
-function readOpenPixField(payload: unknown, ...keys: string[]): string | null {
-  const candidates = collectOpenPixCandidates(payload);
-  for (const candidate of candidates) {
-    const value = pickStringFromRecord(candidate, ...keys);
-    if (value) {
-      return value;
-    }
-  }
-  return null;
-}
-
-function readOpenPixFieldFromPayloads(payloads: unknown[], ...keys: string[]): string | null {
-  for (const payload of payloads) {
-    const value = readOpenPixField(payload, ...keys);
-    if (value) {
-      return value;
-    }
-  }
-  return null;
-}
-
-async function loadLocalCatalog() {
-  const module = await import('../data/catalog');
-  return module.localCatalog;
-}
-
 function mapGame(raw: RawGame): Game {
   const assets: GameAsset[] =
     raw.game_assets?.map((asset) => ({
@@ -260,6 +116,8 @@ function mapGame(raw: RawGame): Game {
     description: raw.description,
     priceCents: raw.price_cents,
     lifetimePriceCents: raw.lifetime_price_cents,
+    stripePriceIdRental: raw.stripe_price_id_rental,
+    stripePriceIdLifetime: raw.stripe_price_id_lifetime,
     rentalDurationDays: raw.rental_duration_days,
     isLifetimeAvailable: raw.is_lifetime_available,
     isPublished: raw.is_published,
@@ -274,6 +132,11 @@ function mapGame(raw: RawGame): Game {
     assets,
     upcoming,
   };
+}
+
+async function loadLocalCatalog() {
+  const module = await import('../data/catalog');
+  return module.localCatalog;
 }
 
 export async function fetchCatalog() {
@@ -324,7 +187,7 @@ export async function fetchGameBySlug(slug: string) {
     return localCatalog.find((game) => game.slug === slug) ?? null;
   }
 
-  return mapGame(data);
+  return mapGame(data as RawGame);
 }
 
 export async function fetchActiveRentals(userId: string): Promise<RentalWithGame[]> {
@@ -405,219 +268,105 @@ export async function fetchNotificationPreferences(userId: string): Promise<Noti
     throw new Error(`Falha ao carregar preferências: ${error.message}`);
   }
 
+  const prefs = (data as RawNotificationPrefs | null) ?? null;
+
   return {
-    emailReleaseAlerts: Boolean(data?.email_release_alerts ?? true),
-    emailExpiryAlerts: Boolean(data?.email_expiry_alerts ?? true),
+    emailReleaseAlerts: Boolean(prefs?.email_release_alerts ?? true),
+    emailExpiryAlerts: Boolean(prefs?.email_expiry_alerts ?? true),
   };
 }
 
-export type CheckoutSessionRecord = {
+export type StripeCheckoutSession = {
   sessionId: string;
-  correlationId: string;
-  status: 'pending' | 'paid' | 'expired' | 'cancelled';
-  amountCents: number;
-  expiresAt?: string | null;
+  url: string;
+  expiresAt: string | null;
+  paymentStatus?: string | null;
   gameId?: string | null;
-  mode?: CheckoutMode;
-  rentalDurationDays?: number | null;
-  qrCodeImage?: string | null;
-  paymentLinkUrl?: string | null;
-  paymentRef?: string | null;
 };
 
 export async function createCheckoutSession(args: {
   gameId: string;
-  mode: CheckoutMode;
+  priceId: string;
   userId: string;
   email: string;
-  amountCents: number;
-  rentalDurationDays?: number;
-}): Promise<CheckoutSessionRecord> {
-  if (!hasSupabaseCredentials()) {
-    throw new Error('Configure SUPABASE_URL e SUPABASE_ANON_KEY para processar pagamentos.');
-  }
-
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase.functions.invoke('openpix-create-session', {
-    body: {
-      user_id: args.userId,
-      email: args.email,
-      game_id: args.gameId,
-      amount: args.amountCents,
-      mode: args.mode,
-      rental_duration_days: args.rentalDurationDays,
+  mode: CheckoutMode;
+  accessToken?: string;
+  successUrl?: string;
+  cancelUrl?: string;
+}): Promise<StripeCheckoutSession> {
+  const response = await fetch('/api/create-checkout', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(args.accessToken ? { Authorization: `Bearer ${args.accessToken}` } : {}),
     },
+    body: JSON.stringify({
+      gameId: args.gameId,
+      priceId: args.priceId,
+      userId: args.userId,
+      email: args.email,
+      mode: args.mode,
+      successUrl: args.successUrl,
+      cancelUrl: args.cancelUrl,
+    }),
   });
 
-  if (error) {
-    throw new Error(error.message ?? 'Falha ao criar sessão de pagamento.');
+  let payload: any = null;
+
+  try {
+    payload = await response.json();
+  } catch (error) {
+    throw new Error('Resposta inválida ao criar sessão de checkout.');
   }
 
-  if (!data || (!data.ok && data.error)) {
-    throw new Error(data?.error ?? 'Falha ao criar sessão de pagamento.');
+  if (!response.ok) {
+    const errorMessage = payload?.error ?? 'Erro ao criar sessão de checkout.';
+    throw new Error(errorMessage);
   }
 
-  const payload = (data.session ?? data) as CheckoutSessionPayload;
-  const openPixPayloads: unknown[] = [
-    data,
-    (data as Record<string, unknown> | null | undefined)?.openpix,
-    (data as Record<string, unknown> | null | undefined)?.charge,
-    payload,
-  ];
-  const qrCodeImage = readOpenPixFieldFromPayloads(
-    openPixPayloads,
-    'qrCodeImage',
-    'qr_code_image',
-    'qrCodeBase64',
-    'qr_code_image_url',
-    'qr_code',
-    'qrcode',
-  );
-  const paymentLinkUrl = readOpenPixFieldFromPayloads(
-    openPixPayloads,
-    'paymentLinkUrl',
-    'payment_link_url',
-    'checkoutUrl',
-    'checkout_url',
-    'link',
-  );
+  const sessionId: string | undefined = payload?.sessionId ?? payload?.session_id;
+  const checkoutUrl: string | undefined = payload?.url ?? payload?.checkoutUrl ?? payload?.checkout_url;
 
-  const sessionId = payload.session_id ?? payload.id ?? undefined;
-  if (!sessionId) {
-    throw new Error('Resposta inválida do servidor: session_id ausente.');
+  if (!sessionId || !checkoutUrl) {
+    throw new Error('Resposta do servidor não contém dados do checkout.');
   }
-
-  const correlationId = extractCorrelationId(payload, sessionId);
-  const amountCents =
-    payload.amount_cents ?? payload.amount ?? data.amount ?? args.amountCents ?? 0;
-  const status = (payload.status as CheckoutSessionRecord['status']) ?? 'pending';
 
   return {
     sessionId,
-    correlationId,
-    status,
-    amountCents,
-    expiresAt: payload.expires_at ?? payload.expiration ?? null,
-    gameId: payload.game_id ?? args.gameId,
-    mode: payload.mode ?? args.mode,
-    rentalDurationDays: payload.rental_duration_days ?? args.rentalDurationDays ?? null,
-    qrCodeImage: qrCodeImage ?? null,
-    paymentLinkUrl: paymentLinkUrl ?? null,
-    paymentRef: payload.payment_ref ?? null,
+    url: checkoutUrl,
+    expiresAt: payload?.expiresAt ?? payload?.expires_at ?? null,
+    paymentStatus: payload?.paymentStatus ?? payload?.payment_status ?? null,
+    gameId: payload?.gameId ?? payload?.game_id ?? args.gameId,
   };
 }
 
-export async function fetchCheckoutPaymentArtifacts(
-  correlationId: string,
-): Promise<{ qrCodeImage: string | null; paymentLinkUrl: string | null } | null> {
-  if (!correlationId) {
-    return null;
+export async function verifyCheckoutSession(sessionId: string) {
+  const response = await fetch(`/api/verify-checkout?session_id=${encodeURIComponent(sessionId)}`);
+
+  let payload: any = null;
+  try {
+    payload = await response.json();
+  } catch (error) {
+    throw new Error('Resposta inválida ao verificar checkout.');
   }
 
-  if (!hasSupabaseCredentials()) {
-    return null;
-  }
-
-  const supabase = getSupabaseClient();
-  const body: Record<string, unknown> = {
-    correlation_id: correlationId,
-    session_id: correlationId,
-  };
-
-  if (env.openPixAppId) {
-    body.app_id = env.openPixAppId;
-  }
-
-  const { data, error } = await supabase.functions.invoke('openpix-checkout', { body });
-
-  if (error) {
-    throw new Error(error.message ?? 'Não foi possível recuperar detalhes da cobrança.');
-  }
-
-  if (!data) {
-    return null;
-  }
-
-  const payloads: unknown[] = [data];
-  const recordData = data as Record<string, unknown>;
-  if (recordData?.session) {
-    payloads.push(recordData.session);
-  }
-  if (recordData?.openpix) {
-    payloads.push(recordData.openpix);
-  }
-  if (recordData?.charge) {
-    payloads.push(recordData.charge);
-  }
-
-  const qrCodeImage = readOpenPixFieldFromPayloads(
-    payloads,
-    'qrCodeImage',
-    'qr_code_image',
-    'qrCodeBase64',
-    'qr_code_image_url',
-    'qr_code',
-    'qrcode',
-  );
-  const paymentLinkUrl = readOpenPixFieldFromPayloads(
-    payloads,
-    'paymentLinkUrl',
-    'payment_link_url',
-    'checkoutUrl',
-    'checkout_url',
-    'link',
-  );
-
-  if (!qrCodeImage && !paymentLinkUrl) {
-    return null;
+  if (!response.ok) {
+    const message = payload?.error ?? 'Erro ao verificar status do checkout.';
+    throw new Error(message);
   }
 
   return {
-    qrCodeImage: qrCodeImage ?? null,
-    paymentLinkUrl: paymentLinkUrl ?? null,
-  };
-}
-
-export async function fetchCheckoutSession(sessionId: string): Promise<CheckoutSessionRecord | null> {
-  if (!hasSupabaseCredentials()) {
-    throw new Error('Supabase não configurado.');
-  }
-
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
-    .from('checkout_sessions')
-    .select('session_id, status, payment_ref, metadata, expires_at, game_id, mode, amount_cents, amount, rental_duration_days')
-    .eq('session_id', sessionId)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(error.message ?? 'Não foi possível consultar a sessão.');
-  }
-
-  if (!data) {
-    return null;
-  }
-
-  const sessionRow = data as RawCheckoutSessionRow;
-  const amount = sessionRow.amount_cents ?? sessionRow.amount ?? 0;
-  const correlationId = extractCorrelationId(sessionRow, sessionId);
-
-  return {
-    sessionId: sessionRow.session_id ?? sessionId,
-    correlationId,
-    status: (sessionRow.status as CheckoutSessionRecord['status']) ?? 'pending',
-    amountCents: amount,
-    expiresAt: sessionRow.expires_at ?? null,
-    gameId: sessionRow.game_id ?? null,
-    mode: sessionRow.mode ?? 'rental',
-    rentalDurationDays: sessionRow.rental_duration_days ?? null,
-    paymentRef: sessionRow.payment_ref ?? null,
+    success: Boolean(payload?.success ?? payload?.ok ?? false),
+    paymentStatus: payload?.paymentStatus ?? payload?.payment_status ?? 'pending',
+    accessActive: Boolean(payload?.accessActive ?? payload?.access_active ?? false),
+    expiresAt: payload?.expiresAt ?? payload?.expires_at ?? null,
+    gameId: payload?.gameId ?? payload?.game_id ?? null,
   };
 }
 
 export async function submitSupportTicket(
   input: { subject: string; message: string; turnstileToken?: string },
-  token?: string,
+  _token?: string,
 ) {
   if (!hasSupabaseCredentials()) {
     throw new Error('Supabase não configurado para registrar chamados.');
